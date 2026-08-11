@@ -4,10 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>__GURTHANG_PROJECT_NAME__</title>
+    {{ ssr_head | safe }}
     {{ asset_tags | safe }}
   </head>
   <body>
-    <script data-page="app" type="application/json">{{ page_json | safe }}</script>
-    <div id="app"></div>
+    {% if ssr_enabled %}
+      {{ ssr_body | safe }}
+    {% else %}
+      <script data-page="app" type="application/json">{{ page_json | safe }}</script>
+      <div id="app"></div>
+    {% endif %}
   </body>
 </html>

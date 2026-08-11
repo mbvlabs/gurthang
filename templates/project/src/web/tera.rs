@@ -1,9 +1,12 @@
 use std::sync::{Arc, RwLock};
 
 use axum::response::Html;
+use include_dir::{Dir, include_dir};
 use serde::Serialize;
 
 use crate::error::{AppError, Result};
+
+static TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
 #[derive(Clone)]
 pub struct TeraEngine(Arc<TeraEngineInner>);
@@ -18,6 +21,15 @@ impl TeraEngine {
         Ok(Self(Arc::new(TeraEngineInner {
             tera: RwLock::new(tera::Tera::new(glob)?),
             glob: Some(glob.to_owned()),
+        })))
+    }
+
+    pub fn embedded() -> Result<Self> {
+        let mut tera = tera::Tera::default();
+        add_embedded_templates(&mut tera, &TEMPLATES)?;
+        Ok(Self(Arc::new(TeraEngineInner {
+            tera: RwLock::new(tera),
+            glob: None,
         })))
     }
 
@@ -51,6 +63,23 @@ impl TeraEngine {
     }
 }
 
+fn add_embedded_templates(tera: &mut tera::Tera, directory: &Dir<'_>) -> Result<()> {
+    for file in directory.files() {
+        let name = file
+            .path()
+            .to_str()
+            .ok_or_else(|| AppError::Config("template path is not UTF-8".into()))?;
+        let contents = file
+            .contents_utf8()
+            .ok_or_else(|| AppError::Config(format!("template {name} is not UTF-8")))?;
+        tera.add_raw_template(name, contents)?;
+    }
+    for child in directory.dirs() {
+        add_embedded_templates(tera, child)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -69,6 +98,15 @@ mod tests {
             )
             .unwrap();
         assert_eq!(output, "&lt;script&gt;alert(1)&lt;&#x2F;script&gt;");
+    }
+
+    #[test]
+    fn production_templates_are_embedded() {
+        let engine = TeraEngine::embedded().unwrap();
+        let Html(output) = engine
+            .render("fragments/counter.html", &serde_json::json!({ "count": 7 }))
+            .unwrap();
+        assert!(output.contains("<strong>7</strong>"));
     }
 
     #[test]

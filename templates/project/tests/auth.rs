@@ -30,6 +30,8 @@ fn test_app(pool: PgPool) -> axum::Router {
         database_url: "postgres://unused".into(),
         session_secure: false,
         vite_dev_server_url: Some("http://127.0.0.1:5173".into()),
+        inertia_ssr_runtime: "node".into(),
+        inertia_ssr_timeout_ms: 5_000,
     });
     let templates = TeraEngine::load("templates/**/*.html").unwrap();
     let inertia = InertiaRenderer::new(

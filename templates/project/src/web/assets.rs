@@ -1,10 +1,19 @@
 use std::{collections::HashMap, fs, path::Path};
 
+use axum::{
+    body::Body,
+    extract::Path as AxumPath,
+    http::{HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
+};
+use include_dir::{Dir, include_dir};
 use serde::Deserialize;
 
 use crate::{config::Config, error::AppError};
 
 const ENTRYPOINT: &str = "resources/js/app.tsx";
+static BUILD_ASSETS: Dir<'_> = include_dir!("$OUT_DIR/dist");
+static PUBLIC_ASSETS: Dir<'_> = include_dir!("$OUT_DIR/assets");
 
 #[derive(Clone, Debug)]
 pub enum AssetResolver {
@@ -29,7 +38,14 @@ impl AssetResolver {
                 server_url: server_url.trim_end_matches('/').to_owned(),
             });
         }
-        Self::from_manifest("dist/.vite/manifest.json")
+        let manifest = BUILD_ASSETS
+            .get_file(".vite/manifest.json")
+            .ok_or_else(|| {
+                AppError::Asset(
+                    "the binary contains no Vite manifest; run `npm run release`".into(),
+                )
+            })?;
+        Self::from_manifest_bytes(manifest.contents())
     }
 
     pub fn from_manifest(path: impl AsRef<Path>) -> Result<Self, AppError> {
@@ -40,7 +56,11 @@ impl AssetResolver {
                 path.display()
             ))
         })?;
-        let manifest: HashMap<String, ManifestEntry> = serde_json::from_slice(&bytes)
+        Self::from_manifest_bytes(&bytes)
+    }
+
+    fn from_manifest_bytes(bytes: &[u8]) -> Result<Self, AppError> {
+        let manifest: HashMap<String, ManifestEntry> = serde_json::from_slice(bytes)
             .map_err(|error| AppError::Asset(format!("invalid Vite manifest: {error}")))?;
         let entry = manifest
             .get(ENTRYPOINT)
@@ -70,6 +90,40 @@ impl AssetResolver {
             }
         }
     }
+}
+
+pub async fn serve_build(AxumPath(path): AxumPath<String>) -> Response {
+    embedded_response(&BUILD_ASSETS, &path, true)
+}
+
+pub async fn serve_public(AxumPath(path): AxumPath<String>) -> Response {
+    embedded_response(&PUBLIC_ASSETS, &path, false)
+}
+
+fn embedded_response(directory: &'static Dir<'static>, path: &str, immutable: bool) -> Response {
+    if !Path::new(path)
+        .components()
+        .all(|component| matches!(component, std::path::Component::Normal(_)))
+    {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Some(file) = directory.get_file(path) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let content_type = mime_guess::from_path(path).first_or_octet_stream();
+    let mut response = Body::from(file.contents()).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(content_type.as_ref())
+            .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+    );
+    if immutable {
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        );
+    }
+    response
 }
 
 #[cfg(test)]

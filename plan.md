@@ -33,6 +33,7 @@ This is not intended to be a complete web framework. The implementation should s
 - Authentication with persistent server-side sessions.
 - Development frontend hot reload through Vite and React Fast Refresh.
 - Production frontend assets resolved through a Vite manifest.
+- Optional Inertia React SSR through a supervised external Node.js or Bun runtime.
 - Tests for the CLI, generated application, protocol behavior, and authentication.
 
 ### Explicitly excluded
@@ -43,8 +44,7 @@ This is not intended to be a complete web framework. The implementation should s
 - Multiple Inertia frontend adapters.
 - Email verification, password reset, OAuth, MFA, remember-me, roles, or permissions.
 - Background jobs, email delivery, telemetry exporters, or deployment packaging.
-- Inertia SSR.
-- Full Inertia v3 support for deferred, merged, once, infinite-scroll, history-encryption, Precognition, or SSR metadata.
+- Full Inertia v3 support for deferred, merged, once, infinite-scroll, history-encryption, or Precognition metadata.
 - A custom procedural macro until the plain trait-based page contract proves too repetitive.
 - General-purpose repository traits or an ORM abstraction over SQLx.
 - A component library for either React or Tera.
@@ -92,10 +92,12 @@ The central contract should resemble:
 ```rust
 pub trait InertiaPage: serde::Serialize {
     const COMPONENT: &'static str;
+    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;
 }
 ```
 
-The renderer accepts `P: InertiaPage`, obtains the component name from `P::COMPONENT`, and serializes the value as page props.
+The renderer accepts `P: InertiaPage`, obtains the component name and per-page
+client/SSR decision from the trait, and serializes the value as page props.
 
 Every page DTO derives `serde::Serialize` and `ts_rs::TS`. Generated TypeScript is consumed directly by the React page. Models are never serialized directly to the browser; safe presentation DTOs explicitly select exposed fields.
 
@@ -489,7 +491,6 @@ Shared props should be typed Rust structures and exported to TypeScript where co
 - Infinite scroll metadata
 - Precognition
 - History encryption
-- SSR
 
 Document these omissions in the generated module and README.
 
@@ -547,9 +548,14 @@ Development behavior:
 Production behavior:
 
 - `npm run build` creates hashed assets and a Vite manifest.
-- The Rust asset resolver reads the manifest and emits script/style tags.
-- Axum serves the built static assets with appropriate content types.
+- The same build creates a self-contained SSR module that the subsequent Cargo build embeds.
+- The Cargo build embeds the manifest, static assets, compiled server-rendered CSS, and templates.
+- The Rust asset resolver reads the embedded manifest and emits script/style tags.
+- Axum serves embedded production assets with appropriate content types and immutable caching for hashed build outputs.
 - Missing manifest or entrypoints produce actionable startup/render errors.
+- When an SSR page is requested, Axum validates and supervises an external Node.js 22+ or Bun process over private standard I/O.
+- SSR is opted into per page through `InertiaPage::RENDER_MODE`; client pages never invoke the runtime.
+- SSR failures and timeouts are logged and fall back to the client-rendered Inertia shell.
 
 Tailwind must scan React sources and Tera templates. Add explicit Tailwind v4 `@source` directives when automatic discovery is insufficient.
 

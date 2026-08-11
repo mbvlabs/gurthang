@@ -6,7 +6,9 @@
     "dev": "vite",
     "css:dev": "./bin/tailwindcli -i ./css/base.css -o ./assets/css/style.css --watch",
     "css:build": "./bin/tailwindcli -i ./css/base.css -o ./assets/css/style.css --minify",
-    "build": "npm run css:build && tsc --noEmit && vite build",
+    "build:ssr": "vite build --config vite.ssr.config.ts",
+    "build": "npm run css:build && tsc --noEmit && vite build && npm run build:ssr",
+    "release": "npm run build && cargo build --release",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -20,6 +22,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0"
   }

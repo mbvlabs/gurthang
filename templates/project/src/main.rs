@@ -6,7 +6,7 @@ use __GURTHANG_CRATE_NAME__::{
     routes,
     web::{
         assets::AssetResolver, development::DevelopmentWatcher, inertia::InertiaRenderer,
-        tera::TeraEngine,
+        inertia::InertiaSsr, tera::TeraEngine,
     },
 };
 use sqlx::postgres::PgPoolOptions;
@@ -26,9 +26,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max_connections(10)
         .connect(&config.database_url)
         .await?;
-    let templates = TeraEngine::load("templates/**/*.html")?;
+    let templates = if config.is_development() {
+        TeraEngine::load("templates/**/*.html")?
+    } else {
+        TeraEngine::embedded()?
+    };
     let assets = AssetResolver::from_config(&config)?;
-    let inertia = InertiaRenderer::new(templates.clone(), assets, env!("CARGO_PKG_VERSION"));
+    let ssr = InertiaSsr::from_config(&config);
+    let inertia =
+        InertiaRenderer::new(templates.clone(), assets, env!("CARGO_PKG_VERSION")).with_ssr(ssr);
     let state = AppState::new(database, Arc::clone(&config), templates.clone(), inertia);
     let listener = TcpListener::bind(config.socket_addr()?).await?;
     let app = routes::router(state);

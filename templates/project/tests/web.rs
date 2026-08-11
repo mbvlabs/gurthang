@@ -25,6 +25,8 @@ fn app() -> axum::Router {
         database_url: "postgres://unused".into(),
         session_secure: false,
         vite_dev_server_url: Some("http://127.0.0.1:5173".into()),
+        inertia_ssr_runtime: "node".into(),
+        inertia_ssr_timeout_ms: 5_000,
     });
     let templates = TeraEngine::load("templates/**/*.html").unwrap();
     let inertia = InertiaRenderer::new(
@@ -35,6 +37,31 @@ fn app() -> axum::Router {
         "test",
     );
     routes::router(AppState::new(database, config, templates, inertia))
+}
+
+fn production_app() -> Option<(axum::Router, String)> {
+    let database = PgPoolOptions::new()
+        .connect_lazy("postgres://postgres:postgres@127.0.0.1/gurthang_test")
+        .unwrap();
+    let config = Arc::new(Config {
+        app_env: "production".into(),
+        app_host: "127.0.0.1".into(),
+        app_port: 3000,
+        app_url: "http://127.0.0.1:3000".into(),
+        database_url: "postgres://unused".into(),
+        session_secure: true,
+        vite_dev_server_url: None,
+        inertia_ssr_runtime: "node".into(),
+        inertia_ssr_timeout_ms: 5_000,
+    });
+    let templates = TeraEngine::embedded().ok()?;
+    let assets = AssetResolver::from_config(&config).ok()?;
+    let head_tags = assets.head_tags();
+    let inertia = InertiaRenderer::new(templates.clone(), assets, "test");
+    Some((
+        routes::router(AppState::new(database, config, templates, inertia)),
+        head_tags,
+    ))
 }
 
 #[tokio::test]
@@ -94,4 +121,44 @@ async fn datastar_endpoint_returns_a_valid_patch_elements_event() {
     assert!(event.contains("event: datastar-patch-elements"));
     assert!(event.contains("selector #counter"));
     assert!(event.contains("Server-rendered count: <strong>5</strong>"));
+}
+
+#[tokio::test]
+async fn production_router_serves_assets_embedded_in_the_binary() {
+    let Some((app, head_tags)) = production_app() else {
+        eprintln!("skipping embedded asset test; run `npm run build` before Cargo");
+        return;
+    };
+
+    let script_start = head_tags.find("src=\"/build/").unwrap() + "src=\"".len();
+    let script_end = head_tags[script_start..].find('"').unwrap() + script_start;
+    let script_path = &head_tags[script_start..script_end];
+    let script = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(script_path)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(script.status(), StatusCode::OK);
+    assert_eq!(script.headers()[header::CONTENT_TYPE], "text/javascript");
+    assert_eq!(
+        script.headers()[header::CACHE_CONTROL],
+        "public, max-age=31536000, immutable"
+    );
+
+    let stylesheet = app
+        .oneshot(
+            Request::builder()
+                .uri("/assets/css/style.css")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stylesheet.status(), StatusCode::OK);
+    assert_eq!(stylesheet.headers()[header::CONTENT_TYPE], "text/css");
 }

@@ -1,8 +1,8 @@
 use serde::Serialize;
 use ts_rs::TS;
 
-use super::InertiaPage;
 use super::shared::SafeUser;
+use super::{InertiaPage, InertiaRenderMode};
 
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -15,4 +15,5 @@ pub struct DashboardProps {
 
 impl InertiaPage for DashboardProps {
     const COMPONENT: &'static str = "Dashboard";
+    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Ssr;
 }

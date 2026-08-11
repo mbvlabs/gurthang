@@ -40,11 +40,14 @@ pub async fn new_login(
     }
     let email = take_old_email(&auth).await?;
     let shared = SharedProps::from_auth(&auth).await?;
-    state.inertia.render(
-        &InertiaRequest::from_parts(&method, &uri, &headers),
-        LoginProps { email },
-        shared,
-    )
+    state
+        .inertia
+        .render(
+            &InertiaRequest::from_parts(&method, &uri, &headers),
+            LoginProps { email },
+            shared,
+        )
+        .await
 }
 
 pub async fn new_register(
@@ -59,11 +62,14 @@ pub async fn new_register(
     }
     let email = take_old_email(&auth).await?;
     let shared = SharedProps::from_auth(&auth).await?;
-    state.inertia.render(
-        &InertiaRequest::from_parts(&method, &uri, &headers),
-        RegisterProps { email },
-        shared,
-    )
+    state
+        .inertia
+        .render(
+            &InertiaRequest::from_parts(&method, &uri, &headers),
+            RegisterProps { email },
+            shared,
+        )
+        .await
 }
 
 pub async fn register(mut auth: AuthSession, request: Request) -> Result<Response> {

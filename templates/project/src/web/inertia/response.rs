@@ -7,17 +7,18 @@ use serde_json::{Map, Value};
 
 use crate::{
     error::{AppError, Result},
-    views::inertia::{InertiaPage, shared::SharedProps},
+    views::inertia::{InertiaPage, InertiaRenderMode, shared::SharedProps},
     web::{assets::AssetResolver, tera::TeraEngine},
 };
 
-use super::{page::Page, request::InertiaRequest};
+use super::{page::Page, request::InertiaRequest, ssr::InertiaSsr};
 
 #[derive(Clone)]
 pub struct InertiaRenderer {
     templates: TeraEngine,
     assets: AssetResolver,
     version: String,
+    ssr: InertiaSsr,
 }
 
 impl InertiaRenderer {
@@ -26,10 +27,16 @@ impl InertiaRenderer {
             templates,
             assets,
             version: version.into(),
+            ssr: InertiaSsr::default(),
         }
     }
 
-    pub fn render<P: InertiaPage>(
+    pub fn with_ssr(mut self, ssr: InertiaSsr) -> Self {
+        self.ssr = ssr;
+        self
+    }
+
+    pub async fn render<P: InertiaPage>(
         &self,
         request: &InertiaRequest,
         props: P,
@@ -68,10 +75,18 @@ impl InertiaRenderer {
             return Ok(response);
         }
 
+        let ssr = if P::RENDER_MODE == InertiaRenderMode::Ssr {
+            self.ssr.render(&page).await
+        } else {
+            None
+        };
         let page_json = serde_json::to_string(&page)?.replace('/', "\\/");
         let values = serde_json::json!({
             "asset_tags": self.assets.head_tags(),
             "page_json": page_json,
+            "ssr_enabled": ssr.is_some(),
+            "ssr_head": ssr.as_ref().map_or_else(String::new, |ssr| ssr.head.join("\n")),
+            "ssr_body": ssr.map_or_else(String::new, |ssr| ssr.body),
         });
         Ok(self
             .templates
@@ -186,6 +201,7 @@ mod tests {
                 },
                 SharedProps::anonymous(),
             )
+            .await
             .unwrap();
         assert_eq!(response.headers()["x-inertia"], "true");
         assert_eq!(response.headers()[header::VARY], "X-Inertia");
@@ -212,6 +228,7 @@ mod tests {
                 },
                 SharedProps::anonymous(),
             )
+            .await
             .unwrap();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let page: Value = serde_json::from_slice(&body).unwrap();
@@ -235,6 +252,7 @@ mod tests {
                 },
                 SharedProps::anonymous(),
             )
+            .await
             .unwrap();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let page: Value = serde_json::from_slice(&body).unwrap();
@@ -252,6 +270,7 @@ mod tests {
                 },
                 SharedProps::anonymous(),
             )
+            .await
             .unwrap();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let html = String::from_utf8(body.to_vec()).unwrap();
@@ -260,8 +279,8 @@ mod tests {
         assert!(!html.contains("&quot;"));
     }
 
-    #[test]
-    fn version_mismatch_and_external_locations_use_conflict() {
+    #[tokio::test]
+    async fn version_mismatch_and_external_locations_use_conflict() {
         let response = renderer()
             .render(
                 &request(&[("x-inertia", "true"), ("x-inertia-version", "old")]),
@@ -271,6 +290,7 @@ mod tests {
                 },
                 SharedProps::anonymous(),
             )
+            .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::CONFLICT);
         assert_eq!(response.headers()["x-inertia-location"], "/test?one=1");

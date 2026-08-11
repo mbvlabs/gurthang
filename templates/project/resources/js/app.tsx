@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import type { ComponentType } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, hydrateRoot } from 'react-dom/client'
 import { createInertiaApp } from '@inertiajs/react'
 import '../../css/base.css'
 
@@ -16,10 +16,15 @@ void createInertiaApp({
     return (await load()).default
   },
   setup({ el, App, props }) {
-    createRoot(el).render(
+    const application = (
       <StrictMode>
         <App {...props} />
-      </StrictMode>,
+      </StrictMode>
     )
+    if (el.hasChildNodes()) {
+      hydrateRoot(el, application)
+    } else {
+      createRoot(el).render(application)
+    }
   },
 })

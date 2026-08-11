@@ -4,8 +4,15 @@ pub mod shared;
 
 use serde::Serialize;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InertiaRenderMode {
+    Client,
+    Ssr,
+}
+
 pub trait InertiaPage: Serialize {
     const COMPONENT: &'static str;
+    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;
 }
 
 pub const PAGE_COMPONENTS: &[(&str, &str)] = &[
@@ -30,7 +37,7 @@ mod tests {
     use ts_rs::TS;
 
     use super::{
-        PAGE_COMPONENTS,
+        InertiaPage, InertiaRenderMode, PAGE_COMPONENTS,
         auth::{LoginProps, RegisterProps},
         dashboard::DashboardProps,
         shared::{AuthProps, FlashProps, SafeUser, SharedProps},
@@ -94,5 +101,12 @@ mod tests {
                 "missing {path}"
             );
         }
+    }
+
+    #[test]
+    fn rendering_mode_is_selected_per_page() {
+        assert_eq!(DashboardProps::RENDER_MODE, InertiaRenderMode::Ssr);
+        assert_eq!(LoginProps::RENDER_MODE, InertiaRenderMode::Client);
+        assert_eq!(RegisterProps::RENDER_MODE, InertiaRenderMode::Client);
     }
 }

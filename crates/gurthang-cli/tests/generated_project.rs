@@ -58,11 +58,15 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "src/web/datastar.rs",
         "src/web/development.rs",
         "src/web/inertia/response.rs",
+        "src/web/inertia/ssr.rs",
         "bin/install-tailwindcli",
         "css/base.css",
         "assets/css/.gitkeep",
         "resources/js/Pages/Auth/Login.tsx",
         "resources/js/Pages/Auth/Register.tsx",
+        "resources/js/ssr.tsx",
+        "vite.ssr.config.ts",
+        "build.rs",
         "templates/fragments/counter.html",
         "tests/auth.rs",
         "tests/web.rs",
@@ -80,6 +84,23 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let package = fs::read_to_string(destination.join("package.json")).unwrap();
     assert!(package.contains("./bin/tailwindcli -i ./css/base.css"));
     assert!(package.contains("\"dev\": \"vite\""));
+    assert!(package.contains("\"build:ssr\""));
+    assert!(package.contains("\"release\""));
+
+    let ssr = fs::read_to_string(destination.join("src/web/inertia/ssr.rs")).unwrap();
+    assert!(ssr.contains("kill_on_drop(true)"));
+    let config = fs::read_to_string(destination.join("src/config.rs")).unwrap();
+    assert!(config.contains("INERTIA_SSR_RUNTIME"));
+    assert!(!config.contains("INERTIA_SSR_ENABLED"));
+    let page_contract = fs::read_to_string(destination.join("src/views/inertia/mod.rs")).unwrap();
+    assert!(page_contract.contains("const RENDER_MODE: InertiaRenderMode"));
+    assert!(page_contract.contains("InertiaRenderMode::Client"));
+    let dashboard = fs::read_to_string(destination.join("src/views/inertia/dashboard.rs")).unwrap();
+    assert!(dashboard.contains("InertiaRenderMode::Ssr"));
+    let auth_pages = fs::read_to_string(destination.join("src/views/inertia/auth.rs")).unwrap();
+    assert!(auth_pages.contains("InertiaRenderMode::Client"));
+    let app = fs::read_to_string(destination.join("resources/js/app.tsx")).unwrap();
+    assert!(app.contains("hydrateRoot"));
 
     #[cfg(unix)]
     {
@@ -97,6 +118,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "argon2",
         "axum-login",
         "datastar",
+        "include_dir",
+        "mime_guess",
         "notify",
         "tower-livereload",
         "tower-sessions-sqlx-store",

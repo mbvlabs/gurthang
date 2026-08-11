@@ -27,13 +27,16 @@ pub async fn show(
     };
     let request = InertiaRequest::from_parts(&method, &uri, &headers);
     let shared = SharedProps::from_auth(&auth).await?;
-    state.inertia.render(
-        &request,
-        DashboardProps {
-            title: "Dashboard".into(),
-            status: "Typed Inertia v3 is connected.".into(),
-            user: SafeUser::from(user),
-        },
-        shared,
-    )
+    state
+        .inertia
+        .render(
+            &request,
+            DashboardProps {
+                title: "Dashboard".into(),
+                status: "Typed Inertia v3 is connected.".into(),
+                user: SafeUser::from(user),
+            },
+            shared,
+        )
+        .await
 }

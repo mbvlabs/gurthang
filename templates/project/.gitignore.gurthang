@@ -1,6 +1,7 @@
 /target
 .env
 /dist
+/dist-ssr
 /node_modules
 /bin/tailwindcli
 /assets/css/style.css

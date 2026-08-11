@@ -11,6 +11,8 @@ pub struct Config {
     pub database_url: String,
     pub session_secure: bool,
     pub vite_dev_server_url: Option<String>,
+    pub inertia_ssr_runtime: String,
+    pub inertia_ssr_timeout_ms: u64,
 }
 
 impl Config {
@@ -28,6 +30,18 @@ impl Config {
         let vite_dev_server_url = env::var("VITE_DEV_SERVER_URL")
             .ok()
             .filter(|value| !value.trim().is_empty());
+        let inertia_ssr_runtime = optional("INERTIA_SSR_RUNTIME", "node");
+        let inertia_ssr_timeout_ms =
+            optional("INERTIA_SSR_TIMEOUT_MS", "5000")
+                .parse()
+                .map_err(|_| {
+                    AppError::Config("INERTIA_SSR_TIMEOUT_MS must be a positive integer".into())
+                })?;
+        if inertia_ssr_timeout_ms == 0 {
+            return Err(AppError::Config(
+                "INERTIA_SSR_TIMEOUT_MS must be greater than zero".into(),
+            ));
+        }
 
         Ok(Self {
             app_env,
@@ -37,6 +51,8 @@ impl Config {
             database_url,
             session_secure,
             vite_dev_server_url,
+            inertia_ssr_runtime,
+            inertia_ssr_timeout_ms,
         })
     }
 
@@ -51,6 +67,13 @@ impl Config {
     pub fn is_development(&self) -> bool {
         self.app_env == "development"
     }
+}
+
+fn optional(name: &str, default: &str) -> String {
+    env::var(name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| default.to_owned())
 }
 
 fn value(name: &str) -> Result<String> {

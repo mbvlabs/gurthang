@@ -1,7 +1,7 @@
 use serde::Serialize;
 use ts_rs::TS;
 
-use super::InertiaPage;
+use super::{InertiaPage, InertiaRenderMode};
 
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +12,7 @@ pub struct LoginProps {
 
 impl InertiaPage for LoginProps {
     const COMPONENT: &'static str = "Auth/Login";
+    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -23,4 +24,5 @@ pub struct RegisterProps {
 
 impl InertiaPage for RegisterProps {
     const COMPONENT: &'static str = "Auth/Register";
+    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;
 }

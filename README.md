@@ -75,17 +75,21 @@ the scaffold placeholders.
 ## Typed Inertia pages
 
 Rust structs under `src/views/inertia` define page prop contracts and implement
-an `InertiaPage` trait containing the component name. `ts-rs` exports those
-contracts to `resources/js/generated`, where the React pages consume them.
+an `InertiaPage` trait containing the component name and its per-page client or
+SSR rendering mode. `ts-rs` exports those contracts to
+`resources/js/generated`, where the React pages consume them.
 
 The generated project uses the official `@inertiajs/react` v3 client. Its local
 Rust server adapter currently implements the protocol subset exercised by the
 proof of concept: initial and subsequent visits, shared props, partial
-include/exclude reloads, redirects, and asset-version refreshes.
+include/exclude reloads, redirects, asset-version refreshes, and optional React
+SSR through a supervised Node.js or Bun child process. The production SSR module
+is embedded into the Rust executable alongside the browser assets, Tera
+templates, and compiled CSS, producing one application artifact.
 
 It is not yet a complete Inertia v3 server adapter. Deferred, optional, merged,
-once and infinite-scroll props, Precognition, history encryption, and SSR are
-not implemented.
+once and infinite-scroll props, Precognition, and history encryption are not
+implemented.
 
 ## Verification
 
