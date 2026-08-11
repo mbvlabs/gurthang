@@ -6,7 +6,7 @@ use clap::{Args, Parser, Subcommand};
 #[command(
     name = "gurthang",
     version,
-    about = "Create a small Rust web application"
+    about = "Create and develop a small Rust web application"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -17,6 +17,9 @@ pub struct Cli {
 pub enum Command {
     /// Create a new Gurthang application.
     New(NewArgs),
+    /// Start the development server with live reload.
+    #[command(visible_alias = "r")]
+    Run,
 }
 
 #[derive(Debug, Args)]

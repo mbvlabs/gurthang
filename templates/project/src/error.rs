@@ -17,6 +17,8 @@ pub enum AppError {
     Serialization(#[from] serde_json::Error),
     #[error("asset configuration error: {0}")]
     Asset(String),
+    #[error("development reload error: {0}")]
+    Development(String),
     #[error("session operation failed: {0}")]
     Session(String),
     #[error("authentication operation failed: {0}")]
@@ -46,6 +48,7 @@ impl IntoResponse for AppError {
             | Self::Template(_)
             | Self::Serialization(_)
             | Self::Asset(_)
+            | Self::Development(_)
             | Self::Session(_)
             | Self::Authentication(_)
             | Self::Internal => {

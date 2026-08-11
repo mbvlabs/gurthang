@@ -8,7 +8,15 @@ fn help_and_version_are_available() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("new"));
+        .stdout(predicate::str::contains("new").and(predicate::str::contains("run")));
+
+    Command::cargo_bin("gurthang")
+        .unwrap()
+        .arg("run")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("live reload"));
 
     Command::cargo_bin("gurthang")
         .unwrap()

@@ -262,6 +262,8 @@ The first version exposes only:
 gurthang new <name>
 gurthang new <name> --path <directory>
 gurthang new <name> --dry-run
+gurthang run
+gurthang r
 gurthang --version
 gurthang --help
 ```
@@ -296,11 +298,17 @@ Created my_app at /path/to/my_app
 Next:
   cd /path/to/my_app
   cp .env.example .env
+  ./bin/install-tailwindcli
   npm install
+  npm run css:build
   sqlx migrate run
-  npm run dev
-  cargo run
+  gurthang run
 ```
+
+`gurthang run` locates the application root, starts Vite, Tailwind, and Cargo,
+restarts the backend after Rust or configuration changes, and owns cleanup of
+every child process. `cargo run` remains available as the unwrapped application
+server.
 
 ### 5.3 CLI tests
 
@@ -682,25 +690,16 @@ npm run css:build
 sqlx migrate run
 ```
 
-Run the Tailwind watcher, frontend, and backend in separate terminals:
+Run the Tailwind watcher, frontend, and backend with one project-local command:
 
 ```bash
-npm run css:dev
+gurthang run
 ```
 
-```bash
-npm run dev
-```
-
-```bash
-cargo run
-```
-
-Optional backend auto-restart:
-
-```bash
-cargo watch -x run
-```
+The Gurthang CLI should preserve Vite React Fast Refresh, compile shared Tailwind
+CSS continuously, reload valid Tera templates in-process, refresh browsers after
+server-rendered changes, and incrementally rebuild/restart the backend after Rust
+changes.
 
 Contract synchronization:
 

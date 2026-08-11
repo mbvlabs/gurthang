@@ -42,7 +42,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "npm install",
         "npm run css:build",
         "sqlx migrate run",
-        "cargo run",
+        "gurthang run",
     ] {
         assert!(readme.contains(command), "README is missing {command}");
     }
@@ -56,6 +56,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "src/services/auth.rs",
         "src/web/csrf.rs",
         "src/web/datastar.rs",
+        "src/web/development.rs",
         "src/web/inertia/response.rs",
         "bin/install-tailwindcli",
         "css/base.css",
@@ -78,6 +79,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(routes.contains("ServeDir::new(\"assets\")"));
     let package = fs::read_to_string(destination.join("package.json")).unwrap();
     assert!(package.contains("./bin/tailwindcli -i ./css/base.css"));
+    assert!(package.contains("\"dev\": \"vite\""));
 
     #[cfg(unix)]
     {
@@ -95,6 +97,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "argon2",
         "axum-login",
         "datastar",
+        "notify",
+        "tower-livereload",
         "tower-sessions-sqlx-store",
     ] {
         assert!(dependencies.contains(dependency), "missing {dependency}");

@@ -11,11 +11,11 @@ machine; especially repeat the HMR rows in a real browser session.
 | Controller-only change | ~1 s | edit controller; `cargo check` | 1 | no | no | Rust diagnostic points at handler/extractor mismatch |
 | Model/query change | ~1 s | edit model SQL; `cargo check` | 1 | no | no | SQL is runtime-checked by integration tests, not compile time |
 | Inertia DTO plus binding/typecheck | ~2 s | edit DTO; `cargo test export_bindings`; `npm run typecheck` | 2 | no | yes | TypeScript points at the consuming React prop |
-| React component through HMR | not browser-timed | edit `.tsx` while `npm run dev` runs | 1 | no | no | Vite transform is automatic; repeat with browser DevTools |
-| Shared Tailwind CSS | not browser-timed | edit `css/base.css` while `npm run css:dev` and Vite run | 1 | no | no | Standalone output serves Tera and Vite updates Inertia; repeat with browser DevTools |
-| Tera template change | restart required | edit `.html`; restart `cargo run` | 1 | no | no | Tera is loaded at backend startup |
+| React component through HMR | not browser-timed | edit `.tsx` while `gurthang run` runs | 1 | no | no | Vite Fast Refresh is automatic; repeat with browser DevTools |
+| Shared Tailwind CSS | not browser-timed | edit `css/base.css` while `gurthang run` runs | 1 | no | no | Vite updates Inertia and the compiled Tera stylesheet triggers browser refresh; repeat with browser DevTools |
+| Tera template change | not browser-timed | edit `.html` while `gurthang run` runs | 1 | no | no | Valid templates replace the in-memory set and refresh the browser; invalid edits retain the last valid set |
 | Migration plus model change | not DB-timed | add migration + edit model; `sqlx migrate run`; `cargo test` | 2 | yes | no | `TEST_DATABASE_URL` tests validate runtime SQL/schema |
-| Full Rust test suite, warm | ~2 s | `cargo test` | 0 | no* | bindings exported by tests | 30 tests; DB tests skip unless `TEST_DATABASE_URL` is set |
+| Full Rust test suite, warm | ~2 s | `cargo test` | 0 | no* | bindings exported by tests | 32 tests; DB tests skip unless `TEST_DATABASE_URL` is set |
 | Frontend typecheck | ~2 s | `npm run typecheck` | 0 | no | bindings must be current | Direct TypeScript errors |
 | Production frontend build | 1.4 s | `npm run build` | 0 | no | no | 567 modules; manifest and hashed assets emitted |
 

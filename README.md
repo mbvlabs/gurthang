@@ -13,7 +13,8 @@ full framework and generator surface.
 From this repository:
 
 ```bash
-cargo run -- new my-app
+cargo install --path crates/gurthang-cli
+gurthang new my-app
 cd my-app
 cp .env.example .env
 ./bin/install-tailwindcli
@@ -22,13 +23,16 @@ npm run css:build
 sqlx migrate run
 ```
 
-Run the application in three terminals:
+Start the backend, Vite, and Tailwind watchers together:
 
 ```bash
-npm run css:dev
-npm run dev
-cargo run
+gurthang run
 ```
+
+`gurthang run` (alias `gurthang r`) owns the development lifecycle. It keeps
+Vite and Tailwind running, restarts only the Cargo backend after Rust changes,
+and cleans up every child process on exit. `cargo run` remains the raw Axum
+server command.
 
 The Tailwind installer pins the standalone CLI and verifies its SHA-256 digest
 before writing `bin/tailwindcli`. It supports Linux and macOS on x86-64 and

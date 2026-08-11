@@ -7,6 +7,7 @@ pub enum Error {
     InvalidProjectName(String),
     DestinationExists(String),
     Io { context: String, source: io::Error },
+    Development(String),
     UnknownPlaceholder { path: String },
 }
 
@@ -27,6 +28,7 @@ impl fmt::Display for Error {
             }
             Self::DestinationExists(message) => write!(formatter, "{message}"),
             Self::Io { context, source } => write!(formatter, "{context}: {source}"),
+            Self::Development(message) => write!(formatter, "{message}"),
             Self::UnknownPlaceholder { path } => {
                 write!(formatter, "unresolved scaffold placeholder in {path}")
             }

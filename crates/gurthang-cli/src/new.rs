@@ -84,8 +84,7 @@ pub fn execute(args: NewArgs, out: &mut impl Write) -> Result<()> {
     .and_then(|_| writeln!(out, "  npm install"))
     .and_then(|_| writeln!(out, "  npm run css:build"))
     .and_then(|_| writeln!(out, "  sqlx migrate run"))
-    .and_then(|_| writeln!(out, "  npm run dev"))
-    .and_then(|_| writeln!(out, "  cargo run"))
+    .and_then(|_| writeln!(out, "  gurthang run"))
     .map_err(|error| Error::io("could not write success output", error))?;
     Ok(())
 }
@@ -141,7 +140,8 @@ mod tests {
     fn creates_a_project_and_substitutes_names() {
         let temp = tempfile::tempdir().unwrap();
         let destination = temp.path().join("output");
-        execute(args("my-app", destination.clone(), false), &mut Vec::new()).unwrap();
+        let mut output = Vec::new();
+        execute(args("my-app", destination.clone(), false), &mut output).unwrap();
 
         let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
         let main = fs::read_to_string(destination.join("src/main.rs")).unwrap();
@@ -149,6 +149,9 @@ mod tests {
         assert!(main.contains("use my_app::"));
         assert!(!cargo.contains("__GURTHANG_"));
         assert!(destination.join(".gitignore").is_file());
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("  gurthang run\n"));
+        assert!(!output.contains("  cargo run\n"));
     }
 
     #[test]

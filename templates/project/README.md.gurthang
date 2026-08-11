@@ -19,27 +19,20 @@ The Tailwind installer supports Linux and macOS on x86-64 and ARM64. It pins
 the standalone CLI version and verifies the platform-specific SHA-256 checksum
 before installing `bin/tailwindcli`.
 
-Run the Tailwind watcher, frontend, and backend in separate terminals:
+Start the complete development environment with one command:
 
 ```bash
-npm run css:dev
+gurthang run
 ```
-
-```bash
-npm run dev
-```
-
-```bash
-cargo run
-```
-
-Optional backend restart support is available with `cargo watch -x run`.
 
 Open <http://127.0.0.1:3000>. `css/base.css` is the single Tailwind source for
 both Tera and Inertia. The standalone `bin/tailwindcli` watcher compiles it to
 `assets/css/style.css` for Tera, while Vite imports the same file for React Fast
-Refresh. Tera and Rust changes require a backend restart. Schema migrations are
-explicit: the application does not run them automatically at startup.
+Refresh. Tera edits reload in the running server and refresh the browser. Rust
+edits incrementally rebuild and restart only the backend, then refresh the
+browser. Gurthang stays alive after a compiler error and retries on the next
+Rust edit. Schema migrations remain explicit: the application does not run
+them automatically at startup.
 
 The public page is rendered with Tera and includes a Datastar counter whose
 response is a server-rendered `PatchElements` SSE event. Registration and login
