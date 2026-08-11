@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@source "../js/**/*.{ts,tsx}";
+@source "../../templates/**/*.html";
+
+:root {
+  color: #172033;
+  font-family: system-ui, sans-serif;
+  background: #f2f5f9;
+}
+
+body { margin: 0; }
+.page-shell { display: grid; min-height: 100vh; place-items: center; padding: 2rem; }
+.card { max-width: 44rem; padding: 3rem; border-radius: 1rem; background: white; box-shadow: 0 1rem 3rem rgb(23 32 51 / 12%); }
+.eyebrow { color: #52678f; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+h1 { margin: .35rem 0 1rem; font-size: clamp(2.5rem, 8vw, 5rem); }
