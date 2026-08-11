@@ -29,7 +29,7 @@
 | Controller-only change | ~1 s | edit handler; `cargo check` | 1 | no | no | Extractor/type errors point to the handler |
 | Model/query change | ~1 s | edit query; `cargo check` | 1 | no | no | Dynamic SQL needs the PostgreSQL integration suite for validation |
 | DTO contract change | ~2 s | `cargo test export_bindings`; `npm run typecheck` | 2 | no | yes | Stale-binding test and TypeScript consumer make drift visible |
-| React/Tailwind HMR | not browser-timed | edit under `npm run dev` | 1 | no | no | Pipeline is configured; browser timing remains machine/operator work |
+| React/Tailwind HMR | not browser-timed | edit React under `npm run dev`; edit shared `css/base.css` under `npm run css:dev` | 1 | no | no | Pipelines are configured; browser timing remains machine/operator work |
 | Tera template | restart required | edit template; restart backend | 1 | no | no | Templates load at startup; error includes template context |
 | Migration + model | not DB-timed | migrate; run `TEST_DATABASE_URL=... cargo test` | 2 | yes | no | Disposable PostgreSQL was unavailable in this environment |
 | Generated Rust suite, warm | ~2 s | `cargo test` | 0 | no* | yes | 30 tests; DB-only tests are gated on `TEST_DATABASE_URL` |

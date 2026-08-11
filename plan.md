@@ -224,8 +224,17 @@ generated-app/
     pages/home.html
     fragments/counter.html
 
+  assets/
+    css/
+      style.css
+
+  bin/
+    tailwindcli
+
+  css/
+    base.css
+
   resources/
-    css/app.css
     js/
       app.tsx
       env.d.ts
@@ -520,6 +529,9 @@ Development behavior:
 
 - The Axum-rendered initial document loads Vite's development client and application entrypoint.
 - React Fast Refresh and Tailwind updates work without restarting Axum.
+- `css/base.css` is the single source stylesheet imported by the Inertia entrypoint and compiled for Tera routes.
+- A pinned, checksum-verified standalone Tailwind executable is installed at `bin/tailwindcli` by the generated setup workflow.
+- The standalone CLI emits `assets/css/style.css` for server-rendered pages and supports a watch mode.
 - CORS/dev-server origin handling is explicit and limited to development.
 - Tera/backend changes may require a Rust restart initially.
 - Document `cargo-watch` as an optional backend restart tool; do not make it a required application dependency.
@@ -664,11 +676,17 @@ The generated README should document a direct setup:
 
 ```bash
 cp .env.example .env
+./bin/install-tailwindcli
 npm install
+npm run css:build
 sqlx migrate run
 ```
 
-Run the frontend and backend in separate terminals:
+Run the Tailwind watcher, frontend, and backend in separate terminals:
+
+```bash
+npm run css:dev
+```
 
 ```bash
 npm run dev
@@ -801,7 +819,7 @@ The proof of concept is complete when all of the following are true:
 2. The generated project has the documented MVC boundaries and contains no unresolved scaffold tokens.
 3. PostgreSQL migrations create users and persistent session storage.
 4. The public Tera page renders and its Datastar interaction returns a working SSE patch.
-5. React/Tailwind run through Vite with frontend hot reload in development.
+5. React uses the shared root Tailwind source through Vite, while Tera uses the standalone Tailwind CLI output with CSS watch mode in development.
 6. Production frontend assets build and are resolved from the Vite manifest.
 7. Inertia v3 initial visits and subsequent visits work for the implemented protocol subset.
 8. Rust page DTOs are the source of truth for generated TypeScript page contracts.

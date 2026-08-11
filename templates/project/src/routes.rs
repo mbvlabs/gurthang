@@ -33,7 +33,7 @@ pub fn router(state: AppState) -> Router {
         .route("/logout", delete(auth::logout))
         .route("/dashboard", get(dashboard::show))
         .route("/demo/counter", get(datastar::counter))
-        .nest_service("/assets", ServeDir::new("resources"))
+        .nest_service("/assets", ServeDir::new("assets"))
         .nest_service("/build", ServeDir::new("dist"))
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(state.clone(), csrf::protect))

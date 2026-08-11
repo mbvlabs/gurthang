@@ -9,11 +9,21 @@ Create a PostgreSQL database, then run:
 
 ```bash
 cp .env.example .env
+./bin/install-tailwindcli
 npm install
+npm run css:build
 sqlx migrate run
 ```
 
-Run the frontend and backend in separate terminals:
+The Tailwind installer supports Linux and macOS on x86-64 and ARM64. It pins
+the standalone CLI version and verifies the platform-specific SHA-256 checksum
+before installing `bin/tailwindcli`.
+
+Run the Tailwind watcher, frontend, and backend in separate terminals:
+
+```bash
+npm run css:dev
+```
 
 ```bash
 npm run dev
@@ -25,9 +35,11 @@ cargo run
 
 Optional backend restart support is available with `cargo watch -x run`.
 
-Open <http://127.0.0.1:3000>. React Fast Refresh and Tailwind updates are
-served by Vite. Tera and Rust changes require a backend restart. Schema migrations are explicit: the application
-does not run them automatically at startup.
+Open <http://127.0.0.1:3000>. `css/base.css` is the single Tailwind source for
+both Tera and Inertia. The standalone `bin/tailwindcli` watcher compiles it to
+`assets/css/style.css` for Tera, while Vite imports the same file for React Fast
+Refresh. Tera and Rust changes require a backend restart. Schema migrations are
+explicit: the application does not run them automatically at startup.
 
 The public page is rendered with Tera and includes a Datastar counter whose
 response is a server-rendered `PatchElements` SSE event. Registration and login
@@ -48,6 +60,7 @@ APP_ENV=production VITE_DEV_SERVER_URL= cargo run --release
 
 Production assets are resolved through `dist/.vite/manifest.json`; a missing
 manifest or entrypoint produces a startup error that points to `npm run build`.
+The build also compiles the shared Tailwind source for server-rendered pages.
 
 ## Page contracts
 

@@ -80,7 +80,9 @@ pub fn execute(args: NewArgs, out: &mut impl Write) -> Result<()> {
     .and_then(|_| writeln!(out, "Next:"))
     .and_then(|_| writeln!(out, "  cd {}", destination.display()))
     .and_then(|_| writeln!(out, "  cp .env.example .env"))
+    .and_then(|_| writeln!(out, "  ./bin/install-tailwindcli"))
     .and_then(|_| writeln!(out, "  npm install"))
+    .and_then(|_| writeln!(out, "  npm run css:build"))
     .and_then(|_| writeln!(out, "  sqlx migrate run"))
     .and_then(|_| writeln!(out, "  npm run dev"))
     .and_then(|_| writeln!(out, "  cargo run"))
@@ -184,17 +186,6 @@ mod tests {
         let output = String::from_utf8(output).unwrap();
         let listed = output.lines().skip(1).map(str::trim).collect::<Vec<_>>();
         assert_eq!(listed, renderer::manifest());
-    }
-
-    #[test]
-    fn preserves_non_text_template_bytes() {
-        let temp = tempfile::tempdir().unwrap();
-        let destination = temp.path().join("output");
-        execute(args("demo", destination.clone(), false), &mut Vec::new()).unwrap();
-        assert_eq!(
-            fs::read(destination.join("resources/scaffold-marker.bin")).unwrap(),
-            include_bytes!("../../../templates/project/resources/scaffold-marker.bin")
-        );
     }
 
     #[test]

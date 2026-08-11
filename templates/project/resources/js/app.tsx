@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import type { ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createInertiaApp } from '@inertiajs/react'
-import '../css/app.css'
+import '../../css/base.css'
 
 const pages = import.meta.glob<{ default: ComponentType }>('./Pages/**/*.tsx')
 

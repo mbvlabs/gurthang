@@ -37,7 +37,13 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let package = fs::read_to_string(destination.join("package.json")).unwrap();
     assert!(package.contains("\"name\": \"sample-app\""));
     let readme = fs::read_to_string(destination.join("README.md")).unwrap();
-    for command in ["npm install", "sqlx migrate run", "cargo run"] {
+    for command in [
+        "./bin/install-tailwindcli",
+        "npm install",
+        "npm run css:build",
+        "sqlx migrate run",
+        "cargo run",
+    ] {
         assert!(readme.contains(command), "README is missing {command}");
     }
     for required in [
@@ -51,6 +57,9 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "src/web/csrf.rs",
         "src/web/datastar.rs",
         "src/web/inertia/response.rs",
+        "bin/install-tailwindcli",
+        "css/base.css",
+        "assets/css/.gitkeep",
         "resources/js/Pages/Auth/Login.tsx",
         "resources/js/Pages/Auth/Register.tsx",
         "templates/fragments/counter.html",
@@ -59,6 +68,26 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "templates/pages/home.html",
     ] {
         assert!(destination.join(required).is_file(), "missing {required}");
+    }
+
+    let inertia_entry = fs::read_to_string(destination.join("resources/js/app.tsx")).unwrap();
+    assert!(inertia_entry.contains("../../css/base.css"));
+    let tera_layout = fs::read_to_string(destination.join("templates/layouts/base.html")).unwrap();
+    assert!(tera_layout.contains("/assets/css/style.css"));
+    let routes = fs::read_to_string(destination.join("src/routes.rs")).unwrap();
+    assert!(routes.contains("ServeDir::new(\"assets\")"));
+    let package = fs::read_to_string(destination.join("package.json")).unwrap();
+    assert!(package.contains("./bin/tailwindcli -i ./css/base.css"));
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mode = fs::metadata(destination.join("bin/install-tailwindcli"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_ne!(mode & 0o111, 0, "Tailwind installer is not executable");
     }
 
     let dependencies = fs::read_to_string(destination.join("Cargo.toml")).unwrap();

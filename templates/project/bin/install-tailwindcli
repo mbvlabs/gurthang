@@ -1,0 +1,54 @@
+#!/bin/sh
+set -eu
+
+version="v4.3.2"
+platform="$(uname -s)"
+architecture="$(uname -m)"
+
+case "$platform/$architecture" in
+  Linux/x86_64)
+    artifact="tailwindcss-linux-x64"
+    expected_sha256="5036c4fb4328e0bcdbb6065c70d8ac9452e0d4c947113a788a8f94fd390425c1"
+    ;;
+  Linux/aarch64|Linux/arm64)
+    artifact="tailwindcss-linux-arm64"
+    expected_sha256="394ddccc2402cfa3abd97dfba56f3587781a3d6e6ce66e65ceada14beb7664b8"
+    ;;
+  Darwin/x86_64)
+    artifact="tailwindcss-macos-x64"
+    expected_sha256="cef8f110471e889c3c4409055cf8aff33076f58a081867b0dfc6534b290bfbb0"
+    ;;
+  Darwin/arm64)
+    artifact="tailwindcss-macos-arm64"
+    expected_sha256="b800b0659dc64b9f03ede5660244d9415d777d5739ae2889280877ca37be742a"
+    ;;
+  *)
+    echo "unsupported Tailwind CLI platform: $platform/$architecture" >&2
+    exit 1
+    ;;
+esac
+
+bin_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+destination="$bin_dir/tailwindcli"
+temporary="$(mktemp "$destination.XXXXXX")"
+trap 'rm -f "$temporary"' EXIT HUP INT TERM
+
+url="https://github.com/tailwindlabs/tailwindcss/releases/download/$version/$artifact"
+echo "Installing Tailwind CSS $version for $platform/$architecture..."
+curl --fail --location --silent --show-error "$url" --output "$temporary"
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual_sha256="$(sha256sum "$temporary" | awk '{print $1}')"
+else
+  actual_sha256="$(shasum -a 256 "$temporary" | awk '{print $1}')"
+fi
+
+if [ "$actual_sha256" != "$expected_sha256" ]; then
+  echo "Tailwind CLI checksum mismatch" >&2
+  exit 1
+fi
+
+chmod 755 "$temporary"
+mv "$temporary" "$destination"
+trap - EXIT HUP INT TERM
+echo "Installed $destination"

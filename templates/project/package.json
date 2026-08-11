@@ -4,14 +4,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "css:dev": "./bin/tailwindcli -i ./css/base.css -o ./assets/css/style.css --watch",
+    "css:build": "./bin/tailwindcli -i ./css/base.css -o ./assets/css/style.css --minify",
+    "build": "npm run css:build && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@inertiajs/react": "^3.0.0",
-    "@tailwindcss/vite": "^4.1.0",
+    "@tailwindcss/vite": "^4.3.2",
     "@vitejs/plugin-react": "^5.0.0",
-    "tailwindcss": "^4.1.0",
+    "tailwindcss": "^4.3.2",
     "vite": "^7.0.0",
     "typescript": "^5.9.0",
     "react": "^19.1.0",

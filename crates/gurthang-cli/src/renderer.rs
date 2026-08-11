@@ -59,7 +59,33 @@ fn render_file(
         contents.to_vec()
     };
     fs::write(&output, bytes)
-        .map_err(|error| Error::io(format!("could not write {}", output.display()), error))
+        .map_err(|error| Error::io(format!("could not write {}", output.display()), error))?;
+    make_executable(&relative, &output)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn make_executable(relative: &str, output: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    if relative == "bin/install-tailwindcli" {
+        let mut permissions = fs::metadata(output)
+            .map_err(|error| Error::io(format!("could not inspect {}", output.display()), error))?
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(output, permissions).map_err(|error| {
+            Error::io(
+                format!("could not make {} executable", output.display()),
+                error,
+            )
+        })?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn make_executable(_relative: &str, _output: &Path) -> Result<()> {
+    Ok(())
 }
 
 fn output_name(source_path: &Path) -> String {
@@ -130,5 +156,14 @@ mod tests {
         let mut expected = manifest.clone();
         expected.sort_unstable();
         assert_eq!(manifest, expected);
+    }
+
+    #[test]
+    fn non_text_template_bytes_are_preserved() {
+        let temp = tempfile::tempdir().unwrap();
+        let name = ProjectName::parse("demo").unwrap();
+        let bytes = [0, 159, 146, 150, 255];
+        render_file(temp.path(), Path::new("fixture.bin"), &bytes, &name).unwrap();
+        assert_eq!(fs::read(temp.path().join("fixture.bin")).unwrap(), bytes);
     }
 }

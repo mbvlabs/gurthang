@@ -1,6 +1,6 @@
 @import "tailwindcss";
-@source "../js/**/*.{ts,tsx}";
-@source "../../templates/**/*.html";
+@source "../resources/js/**/*.{ts,tsx}";
+@source "../templates/**/*.html";
 
 :root {
   color: #172033;
