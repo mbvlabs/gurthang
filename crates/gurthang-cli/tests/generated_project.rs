@@ -49,10 +49,14 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     for required in [
         "migrations/0001_create_users.sql",
         "migrations/0002_create_sessions.sql",
+        "migrations/0003_create_background_jobs.sql",
         "src/app.rs",
         "src/controllers/auth.rs",
         "src/controllers/dashboard.rs",
         "src/models/user.rs",
+        "src/jobs/mod.rs",
+        "src/jobs/queue.rs",
+        "src/jobs/worker.rs",
         "src/services/auth.rs",
         "src/web/csrf.rs",
         "src/web/datastar.rs",
@@ -69,6 +73,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "build.rs",
         "templates/fragments/counter.html",
         "tests/auth.rs",
+        "tests/jobs.rs",
         "tests/web.rs",
         "templates/pages/home.html",
     ] {
@@ -114,6 +119,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     }
 
     let dependencies = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+    assert!(dependencies.contains(r#"features = ["v4", "v7", "serde"]"#));
     for dependency in [
         "argon2",
         "axum-login",
@@ -132,6 +138,15 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     for column in ["id TEXT", "data BYTEA", "expiry_date TIMESTAMPTZ"] {
         assert!(session_migration.contains(column), "missing {column}");
     }
+
+    let jobs = fs::read_to_string(destination.join("src/jobs/worker.rs")).unwrap();
+    assert!(jobs.contains("FOR UPDATE SKIP LOCKED"));
+    assert!(jobs.contains("PgListener"));
+    let job_migration =
+        fs::read_to_string(destination.join("migrations/0003_create_background_jobs.sql")).unwrap();
+    assert!(job_migration.contains("payload JSONB"));
+    assert!(job_migration.contains("id UUID PRIMARY KEY"));
+    assert!(job_migration.contains("locked_by UUID"));
 }
 
 fn collect_files(root: &Path, directory: &Path, output: &mut Vec<String>) {

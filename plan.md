@@ -43,7 +43,7 @@ This is not intended to be a complete web framework. The implementation should s
 - Multiple database engines.
 - Multiple Inertia frontend adapters.
 - Email verification, password reset, OAuth, MFA, remember-me, roles, or permissions.
-- Background jobs, email delivery, telemetry exporters, or deployment packaging.
+- Email delivery, telemetry exporters, or deployment packaging.
 - Full Inertia v3 support for deferred, merged, once, infinite-scroll, history-encryption, or Precognition metadata.
 - A custom procedural macro until the plain trait-based page contract proves too repetitive.
 - General-purpose repository traits or an ORM abstraction over SQLx.
@@ -116,6 +116,20 @@ Use Inertia v3's XSRF convention:
 - Rotate the session identifier after successful login and registration.
 
 Validation failures follow Inertia's redirect model: store errors in the session, redirect back, and share them through `page.props.errors`. Do not return `422` for normal Inertia form validation.
+
+### 3.6 Background jobs
+
+Use a small application-owned PostgreSQL queue instead of another service or a
+job framework dependency. Store typed Serde job messages as JSONB and claim due
+jobs atomically with `FOR UPDATE SKIP LOCKED`. Execution is at least once, so
+handlers must be idempotent. Claims use expiring leases, bounded retries, and
+exponential backoff; exhausted jobs remain queryable with a failed status.
+
+`LISTEN`/`NOTIFY` may wake idle workers promptly, but notifications are never the
+durability mechanism. Workers must poll as a fallback and recover expired
+leases. Support enqueueing on an existing SQLx transaction so the business
+change and its follow-up job commit atomically. Keep dispatch explicit and
+trait-free until the application demonstrates a need for a more general API.
 
 ## 4. Repository Shape
 

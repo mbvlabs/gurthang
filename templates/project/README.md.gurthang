@@ -58,6 +58,58 @@ Bun remain environment services. Run `npm run release` again whenever frontend
 assets or templates change so the new files are embedded. Database migrations
 remain an explicit deployment step.
 
+## Background jobs
+
+The application owns a durable PostgreSQL job queue under `src/jobs`. Running
+the application normally starts the web server and the worker in one process:
+
+```bash
+cargo run
+```
+
+The same artifact can run only one role when a deployment needs to scale or
+restart them independently:
+
+```bash
+target/release/__GURTHANG_PROJECT_NAME__ web
+target/release/__GURTHANG_PROJECT_NAME__ worker
+```
+
+Add typed job variants and their explicit handlers in `src/jobs/mod.rs`. Enqueue
+immediate or scheduled jobs through `state.jobs`:
+
+```rust
+use crate::jobs::Job;
+
+let job_id = state.jobs.enqueue(Job::PurgeExpiredSessions).await?;
+```
+
+For work caused by a database change, enqueue on the same transaction so neither
+can commit without the other:
+
+```rust
+use chrono::Utc;
+use crate::jobs::{Job, JobQueue};
+
+let mut transaction = state.database.begin().await?;
+// Write application data with `transaction` here.
+JobQueue::enqueue_in(&mut transaction, Job::PurgeExpiredSessions, Utc::now()).await?;
+transaction.commit().await?;
+```
+
+Workers claim jobs with `FOR UPDATE SKIP LOCKED`, execute them outside the claim
+transaction, and use expiring leases, bounded exponential retries, and failed-job
+retention. UUIDv7 identifiers preserve insertion locality without another crate.
+Delivery is **at least once**: every handler must be safe to execute
+again after a timeout or process crash. PostgreSQL notifications reduce idle
+latency, while polling and persisted rows provide correctness.
+
+`JOB_WORKERS`, `JOB_POLL_INTERVAL_MS`, `JOB_LEASE_SECONDS`, and
+`JOB_TIMEOUT_SECONDS` tune the worker. The timeout must remain shorter than the
+lease. Completed and permanently failed rows are intentionally retained for
+inspection; add an application-specific retention job once operational needs
+are known.
+
 ## Inertia server-side rendering
 
 Rendering is selected by each Rust page contract. Pages default to client

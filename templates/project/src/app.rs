@@ -4,6 +4,7 @@ use sqlx::PgPool;
 
 use crate::{
     config::Config,
+    jobs::JobQueue,
     web::{inertia::InertiaRenderer, tera::TeraEngine},
 };
 
@@ -13,6 +14,7 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub templates: TeraEngine,
     pub inertia: InertiaRenderer,
+    pub jobs: JobQueue,
 }
 
 impl AppState {
@@ -22,11 +24,13 @@ impl AppState {
         templates: TeraEngine,
         inertia: InertiaRenderer,
     ) -> Self {
+        let jobs = JobQueue::new(database.clone());
         Self {
             database,
             config,
             templates,
             inertia,
+            jobs,
         }
     }
 }

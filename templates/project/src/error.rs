@@ -15,6 +15,8 @@ pub enum AppError {
     Template(#[from] tera::Error),
     #[error("response serialization failed")]
     Serialization(#[from] serde_json::Error),
+    #[error("background job operation failed")]
+    Jobs(#[from] crate::jobs::JobError),
     #[error("asset configuration error: {0}")]
     Asset(String),
     #[error("development reload error: {0}")]
@@ -47,6 +49,7 @@ impl IntoResponse for AppError {
             | Self::Database(_)
             | Self::Template(_)
             | Self::Serialization(_)
+            | Self::Jobs(_)
             | Self::Asset(_)
             | Self::Development(_)
             | Self::Session(_)

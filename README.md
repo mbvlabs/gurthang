@@ -4,6 +4,7 @@ Gurthang is a proof-of-concept Rust project initializer for testing the
 iteration speed of an Axum application with explicit MVC boundaries. It
 generates a self-contained application using PostgreSQL, SQLx, Tera, Datastar,
 React, Tailwind CSS, and a typed Inertia.js v3 server adapter.
+It also includes an application-owned durable PostgreSQL background-job runner.
 
 The goal is to evaluate the development experience, not to reproduce Andurel's
 full framework and generator surface.
@@ -32,7 +33,8 @@ gurthang run
 `gurthang run` (alias `gurthang r`) owns the development lifecycle. It keeps
 Vite and Tailwind running, restarts only the Cargo backend after Rust changes,
 and cleans up every child process on exit. `cargo run` remains the raw Axum
-server command.
+server plus PostgreSQL background-worker command. Generated applications can
+also run `cargo run -- web` or `cargo run -- worker` to isolate either role.
 
 The Tailwind installer pins the standalone CLI and verifies its SHA-256 digest
 before writing `bin/tailwindcli`. It supports Linux and macOS on x86-64 and
@@ -56,6 +58,7 @@ my-app/
 │       └── Dashboard.tsx
 ├── src/
 │   ├── controllers/
+│   ├── jobs/                 # Typed PostgreSQL queue and worker
 │   ├── models/
 │   ├── services/
 │   ├── views/               # Typed presentation DTOs and page contracts
