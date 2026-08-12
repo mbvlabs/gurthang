@@ -1,20 +1,67 @@
 # Gurthang
 
-Gurthang is a proof-of-concept Rust project initializer for testing the
-iteration speed of an Axum application with explicit MVC boundaries. It
-generates a self-contained application using PostgreSQL, SQLx, Tera, Datastar,
-React, Tailwind CSS, and a typed Inertia.js v3 server adapter.
-It also includes an application-owned durable PostgreSQL background-job runner.
+Gurthang is a proof-of-concept project initializer for a small, Rails-shaped
+Rust web application. It generates a self-contained Axum application with
+explicit MVC boundaries, PostgreSQL persistence, server-rendered and React
+frontends, authentication, and durable background jobs.
 
-The goal is to evaluate the development experience, not to reproduce Andurel's
-full framework and generator surface.
+The project currently consists of two pieces:
 
-## Generate an application
+- `gurthang new` renders the application embedded in this repository into a new
+  directory. The generated code is owned by the application; there is no
+  Gurthang runtime dependency.
+- `gurthang run` supervises the generated application's Rust backend, Vite
+  server, and Tailwind watcher during development.
 
-From this repository:
+Gurthang is intended to evaluate the development experience and iteration
+speed of this stack. It is not a general-purpose framework or a complete
+replacement for Andurel's generators.
+
+## What the generated application includes
+
+- Axum and Tokio with a conventional `models`, `services`, `controllers`,
+  `views`, and `web` structure.
+- PostgreSQL and SQLx, with explicit migrations and application-owned queries.
+- A public Tera page and a Datastar counter rendered as a `PatchElements` SSE
+  response.
+- React 19, Vite 7, Tailwind CSS 4, and the official Inertia React v3 client.
+- A local typed Inertia v3 server adapter. Rust page DTOs define both the
+  component and rendering mode, and `ts-rs` exports their TypeScript contracts.
+- Per-page Inertia SSR through a supervised Node.js or Bun process. The
+  dashboard uses SSR; login and registration use client rendering.
+- Registration, login, logout, a protected dashboard, Argon2id password hashes,
+  PostgreSQL-backed sessions, and XSRF protection.
+- An application-owned PostgreSQL job queue with typed payloads, scheduled
+  execution, concurrent workers, expiring leases, bounded exponential retries,
+  `LISTEN`/`NOTIFY` wake-ups, and polling fallback.
+- Development template reload and browser refresh, React Fast Refresh, and
+  backend restart after Rust or configuration changes.
+- Production builds that embed browser assets, compiled CSS, Tera templates,
+  and the Inertia SSR bundle in the Rust executable.
+
+## Requirements
+
+- A recent Rust toolchain with Rust 2024 edition support.
+- PostgreSQL and the SQLx CLI (`sqlx`).
+- Node.js 22 or newer and npm. Bun can replace Node only as the Inertia SSR
+  runtime.
+- `curl` and either `sha256sum` or `shasum` for the Tailwind installer.
+
+The pinned standalone Tailwind CLI installer supports Linux and macOS on x86-64
+and ARM64.
+
+## Quick start
+
+Install the CLI from this repository:
 
 ```bash
 cargo install --path crates/gurthang-cli
+```
+
+Create a PostgreSQL database for the application, then generate and configure
+the project:
+
+```bash
 gurthang new my-app
 cd my-app
 cp .env.example .env
@@ -24,79 +71,158 @@ npm run css:build
 sqlx migrate run
 ```
 
-Start the backend, Vite, and Tailwind watchers together:
+Update `DATABASE_URL` and the other values in `.env` as needed. Migrations are
+always explicit; the application does not run them at startup.
+
+Start the complete development environment:
 
 ```bash
 gurthang run
 ```
 
-`gurthang run` (alias `gurthang r`) owns the development lifecycle. It keeps
-Vite and Tailwind running, restarts only the Cargo backend after Rust changes,
-and cleans up every child process on exit. `cargo run` remains the raw Axum
-server plus PostgreSQL background-worker command. Generated applications can
-also run `cargo run -- web` or `cargo run -- worker` to isolate either role.
+Open <http://127.0.0.1:3000>.
 
-The Tailwind installer pins the standalone CLI and verifies its SHA-256 digest
-before writing `bin/tailwindcli`. It supports Linux and macOS on x86-64 and
-ARM64.
+`gurthang run` can be invoked from the project root or one of its subdirectories.
+It starts `npm run dev`, `npm run css:dev`, and `cargo run`; restarts only the
+backend after changes to Rust files, `Cargo.toml`, or `.env`; and terminates all
+child process groups on exit. A compiler error leaves the supervisor running so
+the next Rust edit can retry the backend.
 
-## Generated layout
+Tera templates reload inside the running backend and refresh the browser. React
+and shared Tailwind changes are handled by Vite and React Fast Refresh.
+
+## CLI
+
+```text
+gurthang new <NAME> [--path <DIRECTORY>] [--dry-run]
+gurthang run
+gurthang r
+```
+
+`new` accepts ASCII letters, digits, hyphens, and underscores, renders through a
+temporary directory, and refuses to overwrite files or non-empty directories.
+`--path` selects a destination independent of the project name. `--dry-run`
+prints the destination and sorted file manifest without writing anything.
+
+## Generated routes
+
+| Method | Path | Implementation |
+| --- | --- | --- |
+| `GET` | `/` | Public Tera page |
+| `GET` | `/demo/counter` | Datastar SSE counter |
+| `GET`, `POST` | `/register` | Client-rendered Inertia registration |
+| `GET`, `POST` | `/login` | Client-rendered Inertia login |
+| `DELETE` | `/logout` | Session logout |
+| `GET` | `/dashboard` | Authenticated, server-rendered Inertia page |
+
+The session cookie is `HttpOnly`, `SameSite=Lax`, and controlled by
+`SESSION_SECURE`. The readable `XSRF-TOKEN` cookie must match the
+`X-XSRF-TOKEN` header for state-changing requests. Set `SESSION_SECURE=true`
+when deploying behind HTTPS. Rate limiting is not included and should be added
+before exposing the authentication endpoints to untrusted traffic.
+
+## Generated project layout
 
 ```text
 my-app/
-├── assets/css/              # Compiled CSS served to Tera/Datastar pages
-├── bin/                     # Tailwind CLI installer and local executable
+├── assets/css/              # Compiled CSS for server-rendered pages
+├── bin/                     # Verified Tailwind CLI installer and executable
 ├── css/base.css             # Shared Tailwind source
-├── migrations/              # Users and persistent sessions
-├── resources/js/            # Inertia React entrypoint, pages, and TS contracts
-│   ├── app.tsx
-│   ├── generated/
-│   └── Pages/
-│       ├── Auth/
-│       │   ├── Login.tsx
-│       │   └── Register.tsx
-│       └── Dashboard.tsx
+├── migrations/              # Users, sessions, and background jobs
+├── resources/js/            # Inertia React client, SSR entry, pages, TS types
 ├── src/
-│   ├── controllers/
-│   ├── jobs/                 # Typed PostgreSQL queue and worker
-│   ├── models/
-│   ├── services/
-│   ├── views/               # Typed presentation DTOs and page contracts
-│   └── web/                 # Inertia, Tera, Datastar, assets, and CSRF
+│   ├── controllers/         # Axum request and response handling
+│   ├── jobs/                # Typed PostgreSQL queue and worker
+│   ├── models/              # Database-shaped entities and queries
+│   ├── services/            # Transactions and multi-step workflows
+│   ├── views/               # Presentation DTOs and page contracts
+│   └── web/                 # Assets, CSRF, Datastar, Inertia, SSR, and Tera
 ├── templates/               # Tera layouts, pages, and fragments
-└── tests/
+└── tests/                   # HTTP, authentication, and job tests
 ```
 
+The source scaffold lives in `templates/project/`. The CLI embeds that directory
+at compile time, copies it into the destination, removes `.gurthang` suffixes,
+and substitutes project, Cargo crate, and package names.
+
 `css/base.css` is the only authored application stylesheet. Vite imports it for
-the Inertia React application, while `bin/tailwindcli` compiles it to
-`assets/css/style.css` for server-rendered routes.
+the React application, while the standalone Tailwind watcher compiles it to
+`assets/css/style.css` for Tera and Datastar routes.
 
-The source repository stores this application under `templates/project/`.
-Running `gurthang new` copies it into the generated project's root and replaces
-the scaffold placeholders.
+## Inertia and SSR
 
-## Typed Inertia pages
+Rust structs under `src/views/inertia` implement `InertiaPage`, which associates
+serialized props with a React component and either client or server rendering.
+Those structs derive `ts-rs::TS`; their committed TypeScript bindings live under
+`resources/js/generated`.
 
-Rust structs under `src/views/inertia` define page prop contracts and implement
-an `InertiaPage` trait containing the component name and its per-page client or
-SSR rendering mode. `ts-rs` exports those contracts to
-`resources/js/generated`, where the React pages consume them.
+The local adapter implements the protocol subset used by the scaffold:
 
-The generated project uses the official `@inertiajs/react` v3 client. Its local
-Rust server adapter currently implements the protocol subset exercised by the
-proof of concept: initial and subsequent visits, shared props, partial
-include/exclude reloads, redirects, asset-version refreshes, and optional React
-SSR through a supervised Node.js or Bun child process. The production SSR module
-is embedded into the Rust executable alongside the browser assets, Tera
-templates, and compiled CSS, producing one application artifact.
+- initial HTML and subsequent JSON visits;
+- shared props and validation errors;
+- partial include and exclude reloads;
+- mutation redirects and external locations;
+- asset-version refreshes; and
+- optional React SSR on initial visits.
 
-It is not yet a complete Inertia v3 server adapter. Deferred, optional, merged,
-once and infinite-scroll props, Precognition, and history encryption are not
-implemented.
+SSR starts lazily when an SSR page is first requested. The default runtime is
+Node.js 22 or newer; set `INERTIA_SSR_RUNTIME=bun` to use Bun. Worker startup and
+rendering use `INERTIA_SSR_TIMEOUT_MS`, and failures fall back to normal client
+rendering. During development, build `dist-ssr/ssr.mjs` before visiting an SSR
+page:
+
+```bash
+npm run build:ssr
+```
+
+Deferred, optional, merged, once, and infinite-scroll props, Precognition, and
+history encryption are not implemented.
+
+## Background jobs
+
+`cargo run` starts the web server and job worker together. The same application
+artifact also supports isolated roles:
+
+```bash
+cargo run -- web
+cargo run -- worker
+cargo run -- all
+```
+
+Jobs are Serde-tagged variants in `src/jobs/mod.rs`. They can be enqueued
+immediately, scheduled for later, or inserted on an existing SQLx transaction
+so the application change and job commit atomically. Delivery is at least once,
+so handlers must be idempotent.
+
+The worker is configured with `JOB_WORKERS`, `JOB_POLL_INTERVAL_MS`,
+`JOB_LEASE_SECONDS`, and `JOB_TIMEOUT_SECONDS`. The job timeout must be shorter
+than the lease. Completed and permanently failed rows are retained for
+inspection; the scaffold does not include an automatic retention policy.
+
+## Production build
+
+From a generated application:
+
+```bash
+npm run release
+APP_ENV=production VITE_DEV_SERVER_URL= target/release/my-app
+```
+
+Run `npm run release` whenever frontend assets or templates change so they are
+embedded again. A deployment still needs PostgreSQL and, when it serves an SSR
+page, Node.js or Bun. Database migrations remain a separate deployment step.
+
+The production process accepts `all` (the default), `web`, or `worker`, which
+allows the web and job-worker roles to be scaled independently:
+
+```bash
+target/release/my-app web
+target/release/my-app worker
+```
 
 ## Verification
 
-Check the project initializer with:
+Check the CLI workspace with:
 
 ```bash
 cargo fmt --all --check
@@ -104,14 +230,19 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-After generating and configuring an application, its primary checks are:
+After generating and configuring an application, run:
 
 ```bash
 cargo test
 npm run typecheck
 npm run build
+cargo clippy --all-targets --all-features -- -D warnings
 ```
 
+`cargo test export_bindings` regenerates the Rust-authored TypeScript contracts.
 PostgreSQL integration tests run when `TEST_DATABASE_URL` points to a disposable
-database. See `plan.md` for the implementation scope and
-`docs/iteration-log.md` for the recorded iteration measurements.
+database; without it, database-only tests report that they were skipped while
+unit and HTTP tests continue to run.
+
+See `plan.md` for the original proof-of-concept scope and architectural
+decisions, and `docs/iteration-log.md` for the recorded iteration measurements.
