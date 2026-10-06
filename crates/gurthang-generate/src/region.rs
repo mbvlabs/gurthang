@@ -1,3 +1,5 @@
+// Comment fences for generate/sync. Turn these into macros later so generated
+// and custom regions are real language items, not string markers.
 pub const GENERATED_START: &str = "// gurthang:generated:start";
 pub const GENERATED_END: &str = "// gurthang:generated:end";
 pub const CUSTOM_START: &str = "// gurthang:custom:start";
@@ -93,18 +95,6 @@ pub fn ensure_line_in_region(
         &source[..end_idx],
         &source[end_idx..]
     ))
-}
-
-pub fn replace_region(source: &str, start: &str, end: &str, body: &str) -> Result<String, crate::Error> {
-    let Some(start_idx) = source.find(start) else {
-        return Err(crate::Error::Message(format!("missing {start} marker")));
-    };
-    let after_start = start_idx + start.len();
-    let Some(rel_end) = source[after_start..].find(end) else {
-        return Err(crate::Error::Message(format!("missing {end} marker")));
-    };
-    let end_idx = after_start + rel_end;
-    Ok(format!("{}\n{body}\n{}", &source[..after_start], &source[end_idx..]))
 }
 
 fn leading_indent(region: &str) -> String {

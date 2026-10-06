@@ -86,10 +86,11 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "src/jobs/mod.rs",
         "src/services/auth.rs",
         "src/routes/mod.rs",
+        "src/routes/generated.rs",
         "src/routes/welcome.rs",
         "src/routes/auth.rs",
         "src/routes/dashboard.rs",
-        "src/views/inertia/welcome.rs",
+        "src/controllers/shared.rs",
         "src/web/assets.rs",
         "css/base.css",
         "assets/.gitkeep",
@@ -110,6 +111,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "src/web/datastar.rs",
         "src/web/tera.rs",
         "src/controllers/pages.rs",
+        "src/views/mod.rs",
+        "src/views/inertia/welcome.rs",
         "src/routes.rs",
         "bin/install-tailwindcli",
         "src/domain/mod.rs",
@@ -134,6 +137,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
 
     let controllers = fs::read_to_string(destination.join("src/controllers/dashboard.rs")).unwrap();
     assert!(!controllers.contains("sqlx::query"));
+    assert!(controllers.contains(".add_route("));
+    assert!(!controllers.contains("AppState"));
 
     let auth = fs::read_to_string(destination.join("src/services/auth.rs")).unwrap();
     assert!(auth.contains("impl axum_login::AuthUser for AuthUser"));
@@ -146,9 +151,20 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let sessions = fs::read_to_string(destination.join("models/src/sessions.rs")).unwrap();
     assert!(sessions.contains("sqlx::query!"));
 
-    let welcome_page =
-        fs::read_to_string(destination.join("src/views/inertia/welcome.rs")).unwrap();
-    assert!(welcome_page.contains("InertiaRenderMode::Client"));
+    let welcome = fs::read_to_string(destination.join("src/controllers/welcome.rs")).unwrap();
+    assert!(welcome.contains("InertiaRenderMode::Client"));
+    assert!(welcome.contains("impl InertiaPage for WelcomeProps"));
+    assert!(welcome.contains("add_route(welcome::WELCOME, show)"));
+    assert!(!welcome.contains("views::inertia"));
+
+    let routes_mod = fs::read_to_string(destination.join("src/routes/mod.rs")).unwrap();
+    assert!(routes_mod.contains("controllers::register"));
+    assert!(!routes_mod.contains("gurthang:generated"));
+
+    let welcome_route = fs::read_to_string(destination.join("src/routes/welcome.rs")).unwrap();
+    assert!(welcome_route.contains("pub const WELCOME"));
+    assert!(!welcome_route.contains("fn mount"));
+    assert!(!welcome_route.contains("AppState"));
 }
 
 fn collect_files(root: &Path, directory: &Path, output: &mut Vec<String>) {

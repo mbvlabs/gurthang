@@ -1,133 +1,153 @@
 use std::{fs, path::Path};
 
+use askama::Template;
 use gurthang_project::ProjectName;
-use include_dir::{Dir, DirEntry, include_dir};
 
 use crate::error::{Error, Result};
 
-pub const PROJECT_TOKEN: &str = "__GURTHANG_PROJECT_NAME__";
-pub const CRATE_TOKEN: &str = "__GURTHANG_CRATE_NAME__";
-pub const PACKAGE_TOKEN: &str = "__GURTHANG_PACKAGE_NAME__";
-pub const SOURCE_TOKEN: &str = "__GURTHANG_SOURCE__";
-
-static TEMPLATE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../templates/project");
-
-pub fn manifest() -> Vec<String> {
-    let mut paths = Vec::new();
-    visit_files(&TEMPLATE, &mut |path, _| paths.push(output_name(path)));
-    paths.sort_unstable();
-    paths
+struct Ctx<'a> {
+    project_name: &'a str,
+    crate_name: &'a str,
+    package_name: &'a str,
+    source: &'a str,
 }
 
-pub fn render(destination: &Path, name: &ProjectName, source_root: &Path) -> Result<()> {
-    let mut result = Ok(());
-    visit_files(&TEMPLATE, &mut |path, contents| {
-        if result.is_err() {
-            return;
+macro_rules! scaffold {
+    ($($ident:ident => $path:literal),+ $(,)?) => {
+        $(
+            #[derive(Template)]
+            #[template(path = $path, escape = "none")]
+            struct $ident<'a> {
+                project_name: &'a str,
+                crate_name: &'a str,
+                package_name: &'a str,
+                source: &'a str,
+            }
+        )+
+
+        pub fn manifest() -> Vec<String> {
+            let mut paths = vec![$(output_name($path)),+];
+            paths.sort_unstable();
+            paths
         }
-        result = render_file(destination, path, contents, name, source_root);
-    });
-    result
-}
 
-fn visit_files<'a>(directory: &'a Dir<'a>, visitor: &mut impl FnMut(&Path, &'a [u8])) {
-    for entry in directory.entries() {
-        match entry {
-            DirEntry::Dir(child) => visit_files(child, visitor),
-            DirEntry::File(file) => visitor(file.path(), file.contents()),
+        pub fn render(destination: &Path, name: &ProjectName, source_root: &Path) -> Result<()> {
+            let source = source_root
+                .canonicalize()
+                .unwrap_or_else(|_| source_root.to_path_buf());
+            let source = source.display().to_string();
+            let ctx = Ctx {
+                project_name: name.project_name(),
+                crate_name: name.crate_name(),
+                package_name: name.package_name(),
+                source: &source,
+            };
+            $(
+                write_file(
+                    destination,
+                    &output_name($path),
+                    $ident {
+                        project_name: ctx.project_name,
+                        crate_name: ctx.crate_name,
+                        package_name: ctx.package_name,
+                        source: ctx.source,
+                    }
+                    .render()?
+                    .as_bytes(),
+                )?;
+            )+
+            Ok(())
         }
-    }
+    };
 }
 
-fn render_file(
-    destination: &Path,
-    source_path: &Path,
-    contents: &[u8],
-    name: &ProjectName,
-    source_root: &Path,
-) -> Result<()> {
-    let relative = output_name(source_path);
-    let output = destination.join(&relative);
+scaffold! {
+    CargoConfig => ".cargo/config.toml",
+    EnvExample => ".env.example",
+    Gitignore => ".gitignore.gurthang",
+    CargoToml => "Cargo.toml.gurthang",
+    Readme => "README.md.gurthang",
+    AssetsGitkeep => "assets/.gitkeep",
+    AssetsCssGitkeep => "assets/css/.gitkeep",
+    BuildRs => "build.rs",
+    BaseCss => "css/base.css",
+    GurthangToml => "gurthang.toml",
+    MigrationUsers => "migrations/0001_create_users.sql",
+    MigrationSessions => "migrations/0002_create_sessions.sql",
+    MigrationJobs => "migrations/0003_create_background_jobs.sql",
+    ModelsSqlxGitkeep => "models/.sqlx/.gitkeep",
+    Sqlx0533 => "models/.sqlx/query-0533c1513f3d1e8a19da3ae5605d90bbdf2afdfbcb4e7d585ed33423079515f7.json",
+    Sqlx2709 => "models/.sqlx/query-2709830df67c99ff91ace028ec2560f0104f0b1abe0279acc29d625740ba986e.json",
+    Sqlx406f => "models/.sqlx/query-406f1d8cf0b11bc075d0a25833d226b36db77da0a259c87555ed1aca2af8bbf2.json",
+    Sqlxb6b8 => "models/.sqlx/query-b6b8bd028b70bec73f8aaf60f2cbf7d15458ed1832d233bfe3ee9a97880bf98a.json",
+    Sqlxd9a4 => "models/.sqlx/query-d9a4838ba7ae06f214ea564e1ffefc4c6e44a9e83201711d81a5909212014e47.json",
+    ModelsCargoToml => "models/Cargo.toml.gurthang",
+    FactoriesMod => "models/src/factories/mod.rs",
+    FactoriesUser => "models/src/factories/user.rs",
+    ModelsLib => "models/src/lib.rs",
+    ModelsSessions => "models/src/sessions.rs",
+    ModelsUser => "models/src/user.rs",
+    PackageJson => "package.json",
+    PageLogin => "resources/js/Pages/Auth/Login.tsx",
+    PageRegister => "resources/js/Pages/Auth/Register.tsx",
+    PageDashboard => "resources/js/Pages/Dashboard.tsx",
+    PageWelcome => "resources/js/Pages/Welcome.tsx",
+    JsApp => "resources/js/app.tsx",
+    JsEnv => "resources/js/env.d.ts",
+    GenAuthProps => "resources/js/generated/AuthProps.ts",
+    GenDashboardProps => "resources/js/generated/DashboardProps.ts",
+    GenFlashProps => "resources/js/generated/FlashProps.ts",
+    GenLoginProps => "resources/js/generated/LoginProps.ts",
+    GenRegisterProps => "resources/js/generated/RegisterProps.ts",
+    GenSafeUser => "resources/js/generated/SafeUser.ts",
+    GenSharedProps => "resources/js/generated/SharedProps.ts",
+    GenWelcomeProps => "resources/js/generated/WelcomeProps.ts",
+    JsRoutes => "resources/js/routes.ts",
+    JsSsr => "resources/js/ssr.tsx",
+    SrcApp => "src/app.rs",
+    BinExportPayloads => "src/bin/export_payloads.rs",
+    BinSeed => "src/bin/seed.rs",
+    SrcConfig => "src/config.rs",
+    ControllerAuth => "src/controllers/auth.rs",
+    ControllerDashboard => "src/controllers/dashboard.rs",
+    ControllerMod => "src/controllers/mod.rs",
+    ControllerShared => "src/controllers/shared.rs",
+    ControllerWelcome => "src/controllers/welcome.rs",
+    SrcError => "src/error.rs",
+    SrcJobs => "src/jobs/mod.rs",
+    SrcLib => "src/lib.rs",
+    SrcMain => "src/main.rs",
+    SrcModels => "src/models.rs",
+    RouteAuth => "src/routes/auth.rs",
+    RouteDashboard => "src/routes/dashboard.rs",
+    RouteGenerated => "src/routes/generated.rs",
+    RouteMod => "src/routes/mod.rs",
+    RouteWelcome => "src/routes/welcome.rs",
+    ServiceAuth => "src/services/auth.rs",
+    ServiceMod => "src/services/mod.rs",
+    WebAssets => "src/web/assets.rs",
+    WebMod => "src/web/mod.rs",
+    TsConfig => "tsconfig.json",
+    ViteConfig => "vite.config.ts",
+    ViteSsrConfig => "vite.ssr.config.ts",
+}
+
+fn output_name(source_path: &str) -> String {
+    source_path
+        .strip_suffix(".gurthang")
+        .unwrap_or(source_path)
+        .to_owned()
+}
+
+fn write_file(destination: &Path, relative: &str, contents: &[u8]) -> Result<()> {
+    let output = destination.join(relative);
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)
             .map_err(|error| Error::io(format!("could not create {}", parent.display()), error))?;
     }
-
-    let bytes = if is_text_template(source_path) {
-        render_text(source_path, contents, name, source_root)?.into_bytes()
-    } else {
-        contents.to_vec()
-    };
-    fs::write(&output, bytes)
+    fs::write(&output, contents)
         .map_err(|error| Error::io(format!("could not write {}", output.display()), error))?;
     Ok(())
-}
-
-fn output_name(source_path: &Path) -> String {
-    let path = source_path.to_string_lossy();
-    path.strip_suffix(".gurthang")
-        .map(str::to_owned)
-        .unwrap_or_else(|| path.into_owned())
-}
-
-fn is_text_template(path: &Path) -> bool {
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default();
-    if matches!(name, ".env.example" | ".gitignore.gurthang") {
-        return true;
-    }
-    matches!(
-        path.extension().and_then(|extension| extension.to_str()),
-        Some(
-            "gurthang"
-                | "css"
-                | "html"
-                | "js"
-                | "json"
-                | "md"
-                | "rs"
-                | "sql"
-                | "ts"
-                | "tsx"
-                | "toml"
-                | "yml"
-                | "yaml"
-        )
-    )
-}
-
-fn render_text(
-    path: &Path,
-    contents: &[u8],
-    name: &ProjectName,
-    source_root: &Path,
-) -> Result<String> {
-    let text = std::str::from_utf8(contents).map_err(|error| {
-        Error::io(
-            format!("template {} is not UTF-8", path.display()),
-            std::io::Error::new(std::io::ErrorKind::InvalidData, error),
-        )
-    })?;
-    let source = source_root
-        .canonicalize()
-        .unwrap_or_else(|_| source_root.to_path_buf());
-    let rendered = text
-        .replace(PROJECT_TOKEN, name.project_name())
-        .replace(CRATE_TOKEN, name.crate_name())
-        .replace(PACKAGE_TOKEN, name.package_name())
-        .replace(SOURCE_TOKEN, &source.display().to_string());
-
-    if [PROJECT_TOKEN, CRATE_TOKEN, PACKAGE_TOKEN, SOURCE_TOKEN]
-        .iter()
-        .any(|token| rendered.contains(token))
-    {
-        return Err(Error::UnknownPlaceholder {
-            path: path.display().to_string(),
-        });
-    }
-    Ok(rendered)
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ pub fn generate(name: &str, options: GenerateOptions, out: &mut impl Write) -> R
     let slug = slug(name);
     let relative = format!("migrations/{next:04}_{slug}.sql");
     let path = root.join(&relative);
-    let contents = format!("-- {slug}\n");
+    let contents = crate::tmpl::migration(&slug)?;
     if options.dry_run {
         writeln!(out, "Would write {relative}")?;
         return Ok(());

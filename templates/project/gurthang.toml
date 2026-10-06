@@ -1,8 +1,0 @@
-schema_version = 1
-
-[project]
-name = "__GURTHANG_PROJECT_NAME__"
-inertia = "react"
-
-[database]
-engine = "postgres"

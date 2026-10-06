@@ -2,7 +2,7 @@ mod error;
 mod renderer;
 
 pub use error::{Error, Result};
-pub use renderer::{CRATE_TOKEN, PACKAGE_TOKEN, PROJECT_TOKEN, SOURCE_TOKEN, manifest};
+pub use renderer::manifest;
 
 use std::{
     fs,

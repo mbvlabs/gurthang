@@ -64,7 +64,7 @@ pub enum GenerateCommand {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Write a controller, routes, views, and React pages.
+    /// Write a controller, named routes, and React pages.
     Controller {
         name: String,
         actions: Vec<String>,

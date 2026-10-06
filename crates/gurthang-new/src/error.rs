@@ -7,7 +7,7 @@ pub enum Error {
     InvalidProjectName(String),
     DestinationExists(String),
     Io { context: String, source: io::Error },
-    UnknownPlaceholder { path: String },
+    Render(String),
 }
 
 impl Error {
@@ -27,9 +27,7 @@ impl fmt::Display for Error {
             }
             Self::DestinationExists(message) => write!(formatter, "{message}"),
             Self::Io { context, source } => write!(formatter, "{context}: {source}"),
-            Self::UnknownPlaceholder { path } => {
-                write!(formatter, "unresolved scaffold placeholder in {path}")
-            }
+            Self::Render(message) => write!(formatter, "{message}"),
         }
     }
 }
@@ -52,5 +50,11 @@ impl From<gurthang_project::Error> for Error {
             gurthang_project::Error::Io { context, source } => Self::Io { context, source },
             other => Self::DestinationExists(other.to_string()),
         }
+    }
+}
+
+impl From<askama::Error> for Error {
+    fn from(error: askama::Error) -> Self {
+        Self::Render(error.to_string())
     }
 }

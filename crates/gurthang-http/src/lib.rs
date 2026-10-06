@@ -4,4 +4,4 @@ mod route;
 
 pub use assets::{AssetError, AssetResolver, ManifestEntry, embedded_response};
 pub use csrf::protect;
-pub use route::Route;
+pub use route::{AddRoute, Route};

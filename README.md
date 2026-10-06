@@ -29,8 +29,9 @@ gurthang db seed [name] [--list]
 gurthang build
 ```
 
-The generated app is MVC (`models`, `controllers`, `views`, `services`, `jobs`)
-plus an Andurel-style `routes/` layer that only names and wires URLs. Stable
+The generated app is MVC (`models`, `controllers`, `services`, `jobs`) plus an
+Andurel-style `routes/` catalog. Named routes drive the paths controllers
+register. Inertia page props live on the controllers. Stable
 protocol code lives in Gurthang crates (`gurthang-inertia`, `gurthang-jobs`,
 `gurthang-http`). Controllers never own SQL.
 
@@ -44,19 +45,25 @@ Linux only. Builds use [Mold](https://github.com/rui314/mold) through clang
 ## Install
 
 Development releases are a single GitHub prerelease on the `development` tag.
-Install the CLI from [Releases](https://github.com/mbvlabs/gurthang/releases):
+Each release attaches a Linux x86_64 `gurthang` binary. That is the install:
+
+```bash
+curl -L https://github.com/mbvlabs/gurthang/releases/download/development/gurthang-x86_64-unknown-linux-gnu \
+  -o ~/.local/bin/gurthang
+chmod +x ~/.local/bin/gurthang
+```
+
+Pick the same asset from [Releases](https://github.com/mbvlabs/gurthang/releases)
+if you would rather download it in the browser.
+
+`cargo install --git` also works, but it compiles `gurthang` on your machine
+from that tag. You need a Rust toolchain, `clang`, and `mold`:
 
 ```bash
 cargo install --git https://github.com/mbvlabs/gurthang --tag development --locked gurthang-cli
 ```
 
-Reinstall with `--force` after that tag moves.
-
-That build needs `clang` and `mold` on the machine (see Requirements). The
-binary it installs is `gurthang`.
-
-A Linux x86_64 binary is attached to each release as
-`gurthang-x86_64-unknown-linux-gnu` if you would rather skip compiling.
+Reinstall with `--force` after the `development` tag moves.
 
 From this tree, while working on Gurthang itself:
 
@@ -105,7 +112,9 @@ git push -f origin development
 ```
 
 The workflow tests the workspace, builds `gurthang`, and creates or updates the
-prerelease with the Linux binary attached. A push to `master` does not publish.
+prerelease with that Linux binary attached. Install the asset; you do not need
+`cargo install` unless you want to compile from the tag. A push to `master`
+does not publish.
 
 ## Generated layout
 
@@ -119,9 +128,8 @@ my-app/
   src/
     main.rs               # thin
     lib.rs
-    controllers/
-    routes/               # paths, names, wiring
-    views/
+    controllers/          # handlers, Inertia props, route registration
+    routes/               # named route catalog
     services/
     jobs/
   resources/js/

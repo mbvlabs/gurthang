@@ -1,0 +1,26 @@
+{
+  "name": "{{ package_name }}",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build:ssr": "vite build --config vite.ssr.config.ts",
+    "build": "tsc --noEmit && vite build && npm run build:ssr",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@inertiajs/react": "^3.0.0",
+    "@tailwindcss/vite": "^4.3.2",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.3.2",
+    "vite": "^7.0.0",
+    "typescript": "^5.9.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0"
+  }
+}

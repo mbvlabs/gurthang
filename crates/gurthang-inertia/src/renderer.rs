@@ -104,8 +104,8 @@ pub fn external_location(location: &str) -> Result<Response> {
     Ok(response)
 }
 
-pub fn mutation_redirect(location: &str) -> Result<Response> {
-    let value = HeaderValue::from_str(location)
+pub fn mutation_redirect(location: impl AsRef<str>) -> Result<Response> {
+    let value = HeaderValue::from_str(location.as_ref())
         .map_err(|_| Error::BadRequest("redirect contains invalid header characters".into()))?;
     Ok((StatusCode::SEE_OTHER, [(header::LOCATION, value)]).into_response())
 }

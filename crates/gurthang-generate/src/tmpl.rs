@@ -1,0 +1,531 @@
+use askama::Template;
+
+use crate::{
+    Error,
+    naming::Resource,
+    schema::{Column, Table},
+};
+
+#[derive(Clone, Debug)]
+struct NamedType {
+    name: String,
+    ty: String,
+}
+
+#[derive(Clone, Debug)]
+struct FactoryField {
+    name: String,
+    ty: String,
+    default: String,
+}
+
+#[derive(Clone, Debug)]
+struct RouteConst {
+    ident: String,
+    name: String,
+    method: String,
+    path: String,
+    handler: String,
+}
+
+#[derive(Clone, Debug)]
+struct ViewPage {
+    name: String,
+    kind: String,
+    component: String,
+}
+
+#[derive(Clone, Debug)]
+struct JsRoute {
+    key: String,
+    name: String,
+    method: String,
+    path: String,
+}
+
+#[derive(Clone, Debug)]
+struct RegisterBinding {
+    ident: String,
+    handler: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ControllerModule {
+    pub name: String,
+    pub register: bool,
+    pub export: bool,
+}
+
+#[derive(Template)]
+#[template(path = "model.rs", escape = "none")]
+struct ModelTemplate {
+    pascal: String,
+    table: String,
+    struct_fields: Vec<NamedType>,
+    data_fields: Vec<NamedType>,
+    has_pk: bool,
+    pk_name: String,
+    pk_type: String,
+    generate_uuid: bool,
+    insert_columns: String,
+    insert_placeholders: String,
+    insert_binds: Vec<String>,
+    update_sets: String,
+    update_binds: Vec<String>,
+    update_pk_index: u32,
+}
+
+#[derive(Template)]
+#[template(path = "factory.rs", escape = "none")]
+struct FactoryTemplate {
+    snake: String,
+    pascal: String,
+    fields: Vec<FactoryField>,
+}
+
+#[derive(Template)]
+#[template(path = "controller.rs", escape = "none")]
+struct ControllerTemplate {
+    snake: String,
+    pascal: String,
+    plural: String,
+    pk_type: String,
+    form_empty: bool,
+    form_fields: Vec<NamedType>,
+    actions: Vec<String>,
+    item_fields: Vec<NamedType>,
+    pages: Vec<ViewPage>,
+    has_item_props: bool,
+    bindings: Vec<RegisterBinding>,
+    index_ident: String,
+    show_ident: String,
+}
+
+#[derive(Template)]
+#[template(path = "routes.rs", escape = "none")]
+struct RoutesTemplate {
+    routes: Vec<RouteConst>,
+}
+
+#[derive(Template)]
+#[template(path = "page.tsx", escape = "none")]
+struct PageTemplate {
+    page: String,
+    title: String,
+}
+
+#[derive(Template)]
+#[template(path = "js_routes.ts", escape = "none")]
+struct JsRoutesTemplate {
+    routes: Vec<JsRoute>,
+}
+
+#[derive(Template)]
+#[template(path = "migration.sql", escape = "none")]
+struct MigrationTemplate {
+    slug: String,
+}
+
+fn render(template: impl Template) -> Result<String, Error> {
+    Ok(template.render()?)
+}
+
+pub(crate) fn model(resource: &Resource, table: &Table) -> Result<String, Error> {
+    let writable = writable_columns(table);
+    let pk = table.columns.iter().find(|column| column.primary_key);
+    let generate_uuid = pk.is_some_and(|pk| !pk.identity && pk.rust_type.contains("Uuid"));
+
+    let mut insert_columns = Vec::new();
+    let mut insert_placeholders = Vec::new();
+    let mut insert_binds = Vec::new();
+    let mut index = 1_u32;
+    if generate_uuid {
+        if let Some(pk) = pk {
+            insert_columns.push(pk.name.clone());
+            insert_placeholders.push(format!("${index}"));
+            insert_binds.push("id".into());
+            index += 1;
+        }
+    }
+    for column in &writable {
+        insert_columns.push(column.name.clone());
+        insert_placeholders.push(format!("${index}"));
+        insert_binds.push(format!("data.{}", column.rust_field));
+        index += 1;
+    }
+    for column in table.columns.iter().filter(|column| column.timestamp) {
+        insert_columns.push(column.name.clone());
+        insert_placeholders.push(format!("${index}"));
+        insert_binds.push("now".into());
+        index += 1;
+    }
+
+    let mut update_sets = Vec::new();
+    let mut update_binds = Vec::new();
+    let mut update_index = 1_u32;
+    for column in &writable {
+        update_sets.push(format!("{} = ${update_index}", column.name));
+        update_binds.push(format!("data.{}", column.rust_field));
+        update_index += 1;
+    }
+    if table.columns.iter().any(|column| column.name == "updated_at") {
+        update_sets.push(format!("updated_at = ${update_index}"));
+        update_binds.push("now".into());
+        update_index += 1;
+    }
+    update_binds.push("id".into());
+
+    render(ModelTemplate {
+        pascal: resource.pascal.clone(),
+        table: table.name.clone(),
+        struct_fields: named_types(table.columns.iter()),
+        data_fields: named_types(writable.into_iter()),
+        has_pk: pk.is_some(),
+        pk_name: pk.map(|column| column.name.clone()).unwrap_or_default(),
+        pk_type: pk
+            .map(|column| column.rust_type.clone())
+            .unwrap_or_default(),
+        generate_uuid,
+        insert_columns: insert_columns.join(", "),
+        insert_placeholders: insert_placeholders.join(", "),
+        insert_binds,
+        update_sets: update_sets.join(", "),
+        update_binds,
+        update_pk_index: update_index,
+    })
+}
+
+pub(crate) fn factory(resource: &Resource, table: &Table) -> Result<String, Error> {
+    let fields = writable_columns(table)
+        .into_iter()
+        .map(|column| FactoryField {
+            name: column.rust_field.clone(),
+            ty: column.rust_type.clone(),
+            default: default_value(column),
+        })
+        .collect();
+    render(FactoryTemplate {
+        snake: resource.snake.clone(),
+        pascal: resource.pascal.clone(),
+        fields,
+    })
+}
+
+pub(crate) fn controller(
+    resource: &Resource,
+    actions: &[String],
+    table: Option<&Table>,
+) -> Result<String, Error> {
+    let form_fields = writable(table);
+    let pages = actions
+        .iter()
+        .filter_map(|action| view_page(resource, action))
+        .collect::<Vec<_>>();
+    let item_fields = table
+        .map(|table| named_types(table.columns.iter()))
+        .unwrap_or_else(|| {
+            vec![NamedType {
+                name: "id".into(),
+                ty: "uuid::Uuid".into(),
+            }]
+        });
+    let has_item_props = pages
+        .iter()
+        .any(|page| page.kind == "index" || page.kind == "item");
+    let bindings = actions
+        .iter()
+        .filter_map(|action| route_const(resource, action))
+        .map(|route| RegisterBinding {
+            ident: route.ident,
+            handler: route.handler,
+        })
+        .collect();
+    render(ControllerTemplate {
+        snake: resource.snake.clone(),
+        pascal: resource.pascal.clone(),
+        plural: resource.plural_snake.clone(),
+        pk_type: table
+            .and_then(primary_key)
+            .map(|column| column.rust_type.clone())
+            .unwrap_or_else(|| "uuid::Uuid".into()),
+        form_empty: form_fields.is_empty(),
+        form_fields,
+        actions: actions.to_vec(),
+        item_fields,
+        pages,
+        has_item_props,
+        bindings,
+        index_ident: route_ident(resource, "index"),
+        show_ident: route_ident(resource, "show"),
+    })
+}
+
+pub(crate) fn routes(resource: &Resource, actions: &[String]) -> Result<String, Error> {
+    render(RoutesTemplate {
+        routes: actions
+            .iter()
+            .filter_map(|action| route_const(resource, action))
+            .collect(),
+    })
+}
+
+pub(crate) fn controllers_mod(modules: &[ControllerModule]) -> String {
+    let mut source = String::new();
+    for module in modules {
+        source.push_str(&format!("pub mod {};\n", module.name));
+    }
+    source.push_str(
+        "\npub fn register(router: axum::Router<crate::app::App>) -> axum::Router<crate::app::App> {\n",
+    );
+    for module in modules {
+        if module.register {
+            source.push_str(&format!(
+                "    let router = {}::register(router);\n",
+                module.name
+            ));
+        }
+    }
+    source.push_str("    router\n}\n\n");
+    source.push_str("pub fn export_payloads() -> Result<(), Box<dyn std::error::Error>> {\n");
+    for module in modules {
+        if module.export {
+            source.push_str(&format!("    {}::export_payloads()?;\n", module.name));
+        }
+    }
+    source.push_str("    Ok(())\n}\n");
+    source
+}
+
+pub(crate) fn routes_generated(modules: &[String]) -> String {
+    let mut source = String::new();
+    for module in modules {
+        source.push_str(&format!("pub mod {module};\n"));
+    }
+    source
+}
+
+pub(crate) fn page(resource: &Resource, action: &str) -> Result<String, Error> {
+    let page = page_name(action).unwrap_or("Index");
+    render(PageTemplate {
+        page: page.to_owned(),
+        title: format!("{} {page}", resource.plural_pascal),
+    })
+}
+
+pub(crate) fn js_routes(routes: &[(String, String, String)]) -> Result<String, Error> {
+    render(JsRoutesTemplate {
+        routes: routes
+            .iter()
+            .map(|(name, method, path)| JsRoute {
+                key: js_key(name),
+                name: name.clone(),
+                method: method.clone(),
+                path: path.clone(),
+            })
+            .collect(),
+    })
+}
+
+pub(crate) fn migration(slug: &str) -> Result<String, Error> {
+    render(MigrationTemplate {
+        slug: slug.to_owned(),
+    })
+}
+
+pub(crate) fn page_name(action: &str) -> Option<&'static str> {
+    match action {
+        "index" => Some("Index"),
+        "show" => Some("Show"),
+        "new" => Some("New"),
+        "edit" => Some("Edit"),
+        _ => None,
+    }
+}
+
+pub(crate) fn props_name(action: &str) -> Option<&'static str> {
+    match action {
+        "index" => Some("IndexProps"),
+        "show" => Some("ShowProps"),
+        "new" => Some("NewProps"),
+        "edit" => Some("EditProps"),
+        _ => None,
+    }
+}
+
+fn writable_columns(table: &Table) -> Vec<&Column> {
+    table
+        .columns
+        .iter()
+        .filter(|column| !column.primary_key && !column.timestamp && !column.identity)
+        .collect()
+}
+
+fn writable(table: Option<&Table>) -> Vec<NamedType> {
+    table
+        .map(|table| named_types(writable_columns(table).into_iter()))
+        .unwrap_or_default()
+}
+
+fn named_types<'a>(columns: impl Iterator<Item = &'a Column>) -> Vec<NamedType> {
+    columns
+        .map(|column| NamedType {
+            name: column.rust_field.clone(),
+            ty: column.rust_type.clone(),
+        })
+        .collect()
+}
+
+fn primary_key(table: &Table) -> Option<&Column> {
+    table.columns.iter().find(|column| column.primary_key)
+}
+
+fn default_value(column: &Column) -> String {
+    let inner = column
+        .rust_type
+        .strip_prefix("Option<")
+        .and_then(|value| value.strip_suffix('>'))
+        .unwrap_or(&column.rust_type);
+    let value = match inner {
+        "String" => "\"example\".into()".into(),
+        "bool" => "false".into(),
+        "i16" | "i32" | "i64" => "0".into(),
+        ty if ty.contains("Uuid") => "uuid::Uuid::new_v4()".into(),
+        ty if ty.contains("DateTime") => "chrono::Utc::now()".into(),
+        _ => "Default::default()".into(),
+    };
+    if column.nullable {
+        format!("Some({value})")
+    } else {
+        value
+    }
+}
+
+fn route_ident(resource: &Resource, action: &str) -> String {
+    format!(
+        "{}_{}",
+        resource.plural_snake.to_uppercase(),
+        action.to_uppercase()
+    )
+}
+
+fn route_const(resource: &Resource, action: &str) -> Option<RouteConst> {
+    let (name, method, path) = route_parts(resource, action)?;
+    Some(RouteConst {
+        ident: route_ident(resource, action),
+        name,
+        method: method.to_owned(),
+        path,
+        handler: action.to_owned(),
+    })
+}
+
+fn route_parts(resource: &Resource, action: &str) -> Option<(String, &'static str, String)> {
+    let name = format!("{}.{}", resource.plural_snake, action);
+    match action {
+        "index" => Some((name, "GET", resource.path.clone())),
+        "new" => Some((name, "GET", format!("{}/new", resource.path))),
+        "create" => Some((name, "POST", resource.path.clone())),
+        "show" => Some((name, "GET", format!("{}/{{id}}", resource.path))),
+        "edit" => Some((name, "GET", format!("{}/{{id}}/edit", resource.path))),
+        "update" => Some((name, "PUT", format!("{}/{{id}}", resource.path))),
+        "destroy" => Some((name, "DELETE", format!("{}/{{id}}", resource.path))),
+        _ => None,
+    }
+}
+
+fn view_page(resource: &Resource, action: &str) -> Option<ViewPage> {
+    let name = props_name(action)?;
+    let page = page_name(action)?;
+    let kind = match action {
+        "index" => "index",
+        "show" | "edit" => "item",
+        "new" => "empty",
+        _ => return None,
+    };
+    Some(ViewPage {
+        name: name.to_owned(),
+        kind: kind.to_owned(),
+        component: format!("{}/{page}", resource.plural_pascal),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::Column;
+
+    fn widget() -> (Resource, Table) {
+        (
+            Resource::parse("Widget", None),
+            Table {
+                name: "widgets".into(),
+                columns: vec![
+                    Column {
+                        name: "id".into(),
+                        rust_type: "uuid::Uuid".into(),
+                        rust_field: "id".into(),
+                        nullable: false,
+                        primary_key: true,
+                        identity: false,
+                        timestamp: false,
+                    },
+                    Column {
+                        name: "name".into(),
+                        rust_type: "String".into(),
+                        rust_field: "name".into(),
+                        nullable: false,
+                        primary_key: false,
+                        identity: false,
+                        timestamp: false,
+                    },
+                ],
+            },
+        )
+    }
+
+    #[test]
+    fn renders_scaffold_file_types() {
+        let (resource, table) = widget();
+        let actions = ["index", "show", "new", "create"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let factory_src = factory(&resource, &table).unwrap();
+        let controller_src = controller(&resource, &actions, Some(&table)).unwrap();
+        let page_src = page(&resource, "index").unwrap();
+        let routes_src =
+            js_routes(&[("widgets.index".into(), "GET".into(), "/widgets".into())]).unwrap();
+        assert!(factory_src.contains("pub struct WidgetFactory"));
+        assert!(controller_src.contains("pub async fn index"));
+        assert!(controller_src.contains("impl InertiaPage for IndexProps"));
+        assert!(controller_src.contains(".add_route("));
+        assert!(controller_src.contains("pub fn register("));
+        assert!(!controller_src.contains("AppState"));
+        assert!(!controller_src.contains("views::inertia"));
+        assert!(page_src.contains("export default function Index"));
+        assert!(routes_src.contains("widgets.index"));
+        assert!(routes_src.contains("{${key}}"));
+    }
+
+    #[test]
+    fn nullable_factory_defaults_are_wrapped() {
+        let column = Column {
+            name: "title".into(),
+            rust_type: "Option<String>".into(),
+            rust_field: "title".into(),
+            nullable: true,
+            primary_key: false,
+            identity: false,
+            timestamp: false,
+        };
+        assert_eq!(default_value(&column), "Some(\"example\".into())");
+    }
+}
+
+fn js_key(name: &str) -> String {
+    if name.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
+        name.to_owned()
+    } else {
+        format!("'{name}'")
+    }
+}

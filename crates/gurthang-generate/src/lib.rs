@@ -7,9 +7,11 @@ mod model;
 mod naming;
 mod prepare;
 mod region;
+mod registration;
 mod schema;
 mod sync_payloads;
 mod sync_routes;
+mod tmpl;
 
 use std::io::Write;
 
@@ -47,6 +49,12 @@ impl From<std::io::Error> for Error {
 
 impl From<sqlx::Error> for Error {
     fn from(error: sqlx::Error) -> Self {
+        Self::Message(error.to_string())
+    }
+}
+
+impl From<askama::Error> for Error {
+    fn from(error: askama::Error) -> Self {
         Self::Message(error.to_string())
     }
 }
