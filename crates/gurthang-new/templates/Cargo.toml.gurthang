@@ -6,6 +6,7 @@ resolver = "2"
 name = "{{ project_name }}"
 version = "0.1.0"
 edition = "2024"
+default-run = "{{ project_name }}"
 
 [lib]
 name = "{{ crate_name }}"

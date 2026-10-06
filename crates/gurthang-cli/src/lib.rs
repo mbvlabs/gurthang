@@ -1,21 +1,28 @@
 pub mod cli;
 pub mod error;
 
-use std::{io::Write, path::PathBuf};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
 
-use cli::{Cli, Command, DbCommand, GenerateCommand, MigrateCommand, SyncCommand};
+use cli::{Cli, Command, DbCommand, GenerateCommand, MigrateCommand, SyncCommand, ToolsCommand};
 use error::{Error, Result};
 
 pub fn run(cli: Cli, out: &mut impl Write) -> Result<()> {
     match cli.command {
         Command::New(args) => {
-            gurthang_new::execute(&args.name, args.path, args.dry_run, &source_root(), out)?
+            gurthang_new::execute(&args.name, args.path, args.dry_run, &source_root()?, out)?
         }
         Command::Run => gurthang_run::execute(out)?,
         Command::Generate(args) => generate(args.command, out)?,
         Command::Sync(args) => sync(args.command, out)?,
         Command::Db(args) => db(args.command, out)?,
         Command::Build => gurthang_build::execute(out)?,
+        Command::Tools(args) => match args.command {
+            None | Some(ToolsCommand::Check) => gurthang_tools::check(out)?,
+            Some(ToolsCommand::Sync) => gurthang_tools::sync(out)?,
+        },
     }
     Ok(())
 }
@@ -113,8 +120,30 @@ fn db(command: DbCommand, out: &mut impl Write) -> Result<()> {
     Ok(())
 }
 
-fn source_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+fn source_root() -> Result<PathBuf> {
+    if let Some(root) = std::env::var_os("GURTHANG_ROOT") {
+        let root = PathBuf::from(root);
+        if is_checkout(&root) {
+            return Ok(root);
+        }
+        return Err(Error::Message(format!(
+            "GURTHANG_ROOT is not a gurthang checkout: {}",
+            root.display()
+        )));
+    }
+
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if is_checkout(&root) {
+        return Ok(root);
+    }
+    Err(Error::Message(format!(
+        "gurthang source not found at {}; set GURTHANG_ROOT to a gurthang checkout",
+        root.display()
+    )))
+}
+
+fn is_checkout(root: &Path) -> bool {
+    root.join("crates/gurthang-http/Cargo.toml").is_file()
 }
 
 impl From<gurthang_new::Error> for Error {
@@ -143,6 +172,12 @@ impl From<gurthang_db::Error> for Error {
 
 impl From<gurthang_build::Error> for Error {
     fn from(error: gurthang_build::Error) -> Self {
+        Self::Message(error.to_string())
+    }
+}
+
+impl From<gurthang_tools::Error> for Error {
+    fn from(error: gurthang_tools::Error) -> Self {
         Self::Message(error.to_string())
     }
 }

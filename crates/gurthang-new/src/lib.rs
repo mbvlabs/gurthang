@@ -7,7 +7,7 @@ pub use renderer::manifest;
 use std::{
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use gurthang_project::ProjectName;
@@ -47,7 +47,8 @@ pub fn execute(
         .prefix(".gurthang-")
         .tempdir_in(parent)
         .map_err(|error| Error::io("could not create temporary project directory", error))?;
-    renderer::render(temporary.path(), &name, source_root)?;
+    let source = source_reference(&destination, source_root);
+    renderer::render(temporary.path(), &name, &source)?;
 
     let destination_was_empty = destination.is_dir();
     if destination_was_empty {
@@ -98,6 +99,64 @@ fn absolute_destination(path: PathBuf) -> Result<PathBuf> {
     std::env::current_dir()
         .map(|current| current.join(path))
         .map_err(|error| Error::io("could not determine current directory", error))
+}
+
+/// Reference to the Gurthang checkout written into the generated Cargo.toml.
+/// Prefers a path relative to the new project so the app keeps working when
+/// the checkout and the project move together; falls back to an absolute path
+/// when no shared root exists.
+fn source_reference(destination: &Path, source_root: &Path) -> String {
+    let source = source_root
+        .canonicalize()
+        .unwrap_or_else(|_| absolute(source_root));
+    let destination = destination
+        .canonicalize()
+        .unwrap_or_else(|_| absolute(destination));
+    relative_path(&destination, &source)
+        .unwrap_or(source)
+        .display()
+        .to_string()
+}
+
+fn absolute(path: &Path) -> PathBuf {
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|current| current.join(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    };
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            component => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
+fn relative_path(base: &Path, target: &Path) -> Option<PathBuf> {
+    let base: Vec<_> = base.components().collect();
+    let target: Vec<_> = target.components().collect();
+    if base.first() != target.first() {
+        return None;
+    }
+    let common = base.iter().zip(&target).take_while(|(a, b)| a == b).count();
+    let mut relative = PathBuf::new();
+    for _ in common..base.len() {
+        relative.push("..");
+    }
+    for component in &target[common..] {
+        relative.push(component.as_os_str());
+    }
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+    Some(relative)
 }
 
 fn validate_destination(path: &Path) -> Result<()> {
@@ -161,6 +220,26 @@ mod tests {
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("  gurthang run\n"));
         assert!(!output.contains("  cargo run\n"));
+    }
+
+    #[test]
+    fn dependency_paths_are_relative_to_the_project() {
+        let temp = tempfile::tempdir().unwrap();
+        let destination = temp.path().join("output");
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        execute(
+            "my-app",
+            Some(destination.clone()),
+            false,
+            &source,
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+        let source = source.canonicalize().unwrap();
+        assert!(!cargo.contains(&format!("path = \"{}/crates", source.display())));
+        assert!(cargo.contains("gurthang-http = { path = \"../"));
     }
 
     #[test]

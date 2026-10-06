@@ -736,6 +736,7 @@ dependencies = [
  "gurthang-generate",
  "gurthang-new",
  "gurthang-run",
+ "gurthang-tools",
  "predicates",
  "tempfile",
 ]
@@ -830,6 +831,13 @@ dependencies = [
  "nix 0.30.1",
  "notify",
  "tempfile",
+]
+
+[[package]]
+name = "gurthang-tools"
+version = "0.1.0"
+dependencies = [
+ "gurthang-project",
 ]
 
 [[package]]

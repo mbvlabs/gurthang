@@ -26,6 +26,8 @@ gurthang db create | drop | nuke | rebuild
 gurthang db migrate up | status
 gurthang db seed [name] [--list]
 
+gurthang tools [check|sync]
+
 gurthang build
 ```
 
@@ -57,6 +59,15 @@ chmod +x ~/.local/bin/gurthang
 Pick the same asset from [Releases](https://github.com/mbvlabs/gurthang/releases)
 if you would rather download it in the browser.
 
+Generated apps path-depend on the Gurthang checkout they were scaffolded from,
+and a release binary has no checkout at the path it was compiled on. Clone this
+repository and point the binary at it:
+
+```bash
+git clone https://github.com/mbvlabs/gurthang.git
+export GURTHANG_ROOT=~/gurthang
+```
+
 `cargo install --git` also works, but it compiles `gurthang` on your machine
 from that tag. You need a Rust toolchain, `clang`, and `mold`:
 
@@ -72,9 +83,11 @@ From this tree, while working on Gurthang itself:
 cargo install --path crates/gurthang-cli --locked --force
 ```
 
-`gurthang new` path-depends generated apps on the Gurthang source used to
-compile the CLI. Use `--path` from a clone when you want those apps to follow
-this working tree.
+`gurthang new` path-depends generated apps on a Gurthang checkout: `$GURTHANG_ROOT`
+when set, otherwise the source tree the CLI was compiled from, and it refuses to
+scaffold when neither exists. The generated `Cargo.toml` records the dependency as
+a path relative to the new project when both share a filesystem root, so the app
+keeps following the checkout when they move together.
 
 ## Requirements
 
@@ -83,6 +96,10 @@ this working tree.
 - `clang` and `mold`
 - PostgreSQL and the SQLx CLI (`cargo install sqlx-cli`)
 - Node.js 22 or newer and npm
+
+`gurthang tools` reports which requirements are met and where to get the
+missing ones. `gurthang tools sync` installs what ships through cargo
+(sqlx-cli, pinned to the project's sqlx version).
 
 ## Quick start
 

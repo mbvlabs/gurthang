@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gurthang_project::find_root_from;
+use gurthang_project::{GurthangToml, find_root_from};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 const RESTART_DEBOUNCE: Duration = Duration::from_millis(100);
@@ -183,6 +183,12 @@ fn validate_project(root: &Path) -> Result<()> {
     Ok(())
 }
 
+fn spawn_backend(root: &Path) -> Result<ManagedChild> {
+    let bin = GurthangToml::load(root)?.project.name;
+    let args = ["run", "--bin", bin.as_str()];
+    ManagedChild::spawn(root, "backend", "cargo", &args)
+}
+
 struct Processes {
     root: PathBuf,
     frontend: ManagedChild,
@@ -192,7 +198,7 @@ struct Processes {
 impl Processes {
     fn start(root: &Path) -> Result<Self> {
         let frontend = ManagedChild::spawn(root, "Vite", "npm", &["run", "dev"])?;
-        let backend = ManagedChild::spawn(root, "backend", "cargo", &["run"])?;
+        let backend = spawn_backend(root)?;
         Ok(Self {
             root: root.to_path_buf(),
             frontend,
@@ -204,12 +210,7 @@ impl Processes {
         if let Some(mut backend) = self.backend.take() {
             backend.stop();
         }
-        self.backend = Some(ManagedChild::spawn(
-            &self.root,
-            "backend",
-            "cargo",
-            &["run"],
-        )?);
+        self.backend = Some(spawn_backend(&self.root)?);
         Ok(())
     }
 

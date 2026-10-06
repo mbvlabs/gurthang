@@ -17,6 +17,7 @@ gurthang-db = { path = "../gurthang-db" }
 gurthang-generate = { path = "../gurthang-generate" }
 gurthang-new = { path = "../gurthang-new" }
 gurthang-run = { path = "../gurthang-run" }
+gurthang-tools = { path = "../gurthang-tools" }
 
 [dev-dependencies]
 assert_cmd = "2.0"

@@ -28,6 +28,8 @@ pub enum Command {
     Db(DbArgs),
     /// Build frontend assets and a release binary.
     Build,
+    /// Check or install the tools a Gurthang application needs.
+    Tools(ToolsArgs),
 }
 
 #[derive(Debug, Args)]
@@ -124,6 +126,20 @@ pub enum SyncCommand {
         #[arg(long)]
         sync: bool,
     },
+}
+
+#[derive(Debug, Args)]
+pub struct ToolsArgs {
+    #[command(subcommand)]
+    pub command: Option<ToolsCommand>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ToolsCommand {
+    /// Report required tools and how to install missing ones.
+    Check,
+    /// Install missing tools that ship through cargo.
+    Sync,
 }
 
 #[derive(Debug, Args)]

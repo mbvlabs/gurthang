@@ -32,12 +32,15 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     }
 
     let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+    let source = source.canonicalize().unwrap();
+    assert!(!cargo.contains(&format!("path = \"{}/crates", source.display())));
     assert!(cargo.contains("name = \"sample-app\""));
     assert!(cargo.contains("name = \"sample_app\""));
     assert!(cargo.contains("gurthang-inertia"));
     assert!(cargo.contains("gurthang-jobs"));
     assert!(cargo.contains("gurthang-http"));
     assert!(cargo.contains("[workspace]"));
+    assert!(cargo.contains("default-run = \"sample-app\""));
     assert!(cargo.contains("sample_app_models"));
     assert!(!cargo.contains("tera"));
     assert!(!cargo.contains("datastar"));

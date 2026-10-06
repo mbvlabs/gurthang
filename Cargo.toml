@@ -10,6 +10,7 @@ members = [
     "crates/gurthang-inertia",
     "crates/gurthang-jobs",
     "crates/gurthang-http",
+    "crates/gurthang-tools",
 ]
 resolver = "2"
 

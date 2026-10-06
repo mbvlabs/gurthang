@@ -6,10 +6,7 @@ use std::{
 };
 
 use gurthang_project::find_root;
-use sqlx::{
-    Connection, PgConnection, postgres::PgConnectOptions,
-    migrate::Migrator,
-};
+use sqlx::{Connection, PgConnection, migrate::Migrator, postgres::PgConnectOptions};
 
 #[derive(Debug)]
 pub enum Error {
@@ -72,6 +69,7 @@ pub fn nuke(options: DbOptions, out: &mut impl Write) -> Result<()> {
 }
 
 pub fn rebuild(options: DbOptions, out: &mut impl Write) -> Result<()> {
+    require_sqlx_cli()?;
     let root = project_root()?;
     confirm_destructive(&options, "rebuild the database")?;
     runtime()?.block_on(async {
@@ -83,6 +81,7 @@ pub fn rebuild(options: DbOptions, out: &mut impl Write) -> Result<()> {
 }
 
 pub fn migrate_up(out: &mut impl Write) -> Result<()> {
+    require_sqlx_cli()?;
     let root = project_root()?;
     runtime()?.block_on(migrate_up_async(&root, out))
 }
@@ -132,9 +131,8 @@ fn load_env(root: &Path) {
 
 fn database_url(root: &Path) -> Result<String> {
     load_env(root);
-    env::var("DATABASE_URL").map_err(|_| {
-        Error::Message("DATABASE_URL is not set; copy .env.example to .env".into())
-    })
+    env::var("DATABASE_URL")
+        .map_err(|_| Error::Message("DATABASE_URL is not set; copy .env.example to .env".into()))
 }
 
 fn confirm_destructive(options: &DbOptions, action: &str) -> Result<()> {
@@ -160,10 +158,11 @@ async fn create_async(root: &Path, out: &mut impl Write) -> Result<()> {
     let url = database_url(root)?;
     let (admin, name) = admin_url(&url)?;
     let mut connection = PgConnection::connect(&admin).await?;
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
-        .bind(&name)
-        .fetch_one(&mut connection)
-        .await?;
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)")
+            .bind(&name)
+            .fetch_one(&mut connection)
+            .await?;
     if exists {
         writeln!(out, "Database {name} already exists.")?;
         return Ok(());
@@ -209,6 +208,23 @@ async fn migrate_up_async(root: &Path, out: &mut impl Write) -> Result<()> {
     Ok(())
 }
 
+fn require_sqlx_cli() -> Result<()> {
+    let available = Command::new("cargo")
+        .args(["sqlx", "--version"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false);
+    if available {
+        return Ok(());
+    }
+    Err(Error::Message(
+        "sqlx-cli is not installed; migrations refresh offline query data with \
+         `cargo sqlx prepare`. Run `gurthang tools sync` or install it with \
+         `cargo install sqlx-cli`"
+            .into(),
+    ))
+}
+
 fn sqlx_prepare(root: &Path, out: &mut impl Write) -> Result<()> {
     let mut command = Command::new("cargo");
     command
@@ -229,12 +245,11 @@ fn sqlx_prepare(root: &Path, out: &mut impl Write) -> Result<()> {
 async fn migrate_status_async(root: &Path, out: &mut impl Write) -> Result<()> {
     let url = database_url(root)?;
     let mut connection = PgConnection::connect(&url).await?;
-    let applied: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT version, description FROM _sqlx_migrations ORDER BY version",
-    )
-    .fetch_all(&mut connection)
-    .await
-    .unwrap_or_default();
+    let applied: Vec<(i64, String)> =
+        sqlx::query_as("SELECT version, description FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(&mut connection)
+            .await
+            .unwrap_or_default();
     if applied.is_empty() {
         writeln!(out, "No applied migrations.")?;
         return Ok(());
@@ -249,10 +264,7 @@ fn admin_url(database_url: &str) -> Result<(String, String)> {
     let options: PgConnectOptions = database_url
         .parse()
         .map_err(|error| Error::Message(format!("invalid DATABASE_URL: {error}")))?;
-    let name = options
-        .get_database()
-        .unwrap_or("postgres")
-        .to_owned();
+    let name = options.get_database().unwrap_or("postgres").to_owned();
     if name == "postgres" {
         return Err(Error::Message(
             "refusing to manage the postgres admin database".into(),
@@ -275,14 +287,45 @@ fn strip_database_name(database_url: &str) -> Result<String> {
 }
 
 fn quote_ident(name: &str) -> Result<String> {
-    if !name
+    if name.is_empty() {
+        return Err(Error::Message("DATABASE_URL has no database name".into()));
+    }
+    if let Some(invalid) = name
         .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
-        || name.is_empty()
+        .find(|character| !(character.is_ascii_alphanumeric() || *character == '_'))
     {
         return Err(Error::Message(format!(
-            "refusing to use unsafe database name {name:?}"
+            "invalid database name {name:?} in DATABASE_URL: {invalid:?} is not allowed; \
+             use only ASCII letters, digits, and underscores"
         )));
     }
     Ok(format!("\"{name}\""))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quote_ident;
+
+    #[test]
+    fn quotes_safe_names() {
+        assert_eq!(quote_ident("rusty_app").unwrap(), "\"rusty_app\"");
+        assert_eq!(quote_ident("app2").unwrap(), "\"app2\"");
+    }
+
+    #[test]
+    fn explains_the_invalid_character() {
+        let error = quote_ident("rusty-app").unwrap_err().to_string();
+        assert!(error.contains("\"rusty-app\""), "{error}");
+        assert!(error.contains("'-'"), "{error}");
+        assert!(
+            error.contains("ASCII letters, digits, and underscores"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn rejects_injection_attempts() {
+        assert!(quote_ident("app\"; DROP DATABASE postgres --").is_err());
+        assert!(quote_ident("").is_err());
+    }
 }

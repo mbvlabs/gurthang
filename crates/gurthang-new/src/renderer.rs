@@ -31,16 +31,12 @@ macro_rules! scaffold {
             paths
         }
 
-        pub fn render(destination: &Path, name: &ProjectName, source_root: &Path) -> Result<()> {
-            let source = source_root
-                .canonicalize()
-                .unwrap_or_else(|_| source_root.to_path_buf());
-            let source = source.display().to_string();
+        pub fn render(destination: &Path, name: &ProjectName, source: &str) -> Result<()> {
             let ctx = Ctx {
                 project_name: name.project_name(),
                 crate_name: name.crate_name(),
                 package_name: name.package_name(),
-                source: &source,
+                source,
             };
             $(
                 write_file(
