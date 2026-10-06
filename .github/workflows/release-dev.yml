@@ -1,0 +1,75 @@
+name: Development release
+
+on:
+  push:
+    tags:
+      - "v*-dev"
+      - "v*-dev.*"
+
+concurrency:
+  group: development-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  release:
+    name: Publish development release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang and mold
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang mold
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Build gurthang
+        run: cargo build --release --locked -p gurthang-cli
+
+      - name: Stage Linux binary
+        run: install -Dm755 target/release/gurthang gurthang-x86_64-unknown-linux-gnu
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          repo="https://github.com/${GITHUB_REPOSITORY}"
+          notes="$(mktemp)"
+          cat > "${notes}" <<EOF
+          Development build of Gurthang \`${TAG}\`.
+
+          Install from this tag:
+
+          \`\`\`bash
+          cargo install --git ${repo} --tag ${TAG} --locked gurthang-cli
+          \`\`\`
+
+          Linux x86_64 binary: \`gurthang-x86_64-unknown-linux-gnu\`.
+          EOF
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" gurthang-x86_64-unknown-linux-gnu --clobber
+          else
+            gh release create "${TAG}" \
+              --prerelease \
+              --title "Gurthang ${TAG}" \
+              --notes-file "${notes}" \
+              gurthang-x86_64-unknown-linux-gnu
+          fi

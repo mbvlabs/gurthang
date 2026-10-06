@@ -12,8 +12,8 @@ use crate::{
         dashboard::DashboardProps,
         shared::{SafeUser, SharedProps},
     },
-    web::inertia::InertiaRequest,
 };
+use gurthang_inertia::{InertiaRequest, mutation_redirect};
 
 pub async fn show(
     State(state): State<AppState>,
@@ -23,20 +23,20 @@ pub async fn show(
     headers: HeaderMap,
 ) -> Result<Response> {
     let Some(user) = auth.user.as_ref() else {
-        return crate::web::inertia::mutation_redirect("/login");
+        return Ok(mutation_redirect("/login")?);
     };
     let request = InertiaRequest::from_parts(&method, &uri, &headers);
     let shared = SharedProps::from_auth(&auth).await?;
-    state
+    Ok(state
         .inertia
         .render(
             &request,
             DashboardProps {
                 title: "Dashboard".into(),
                 status: "Typed Inertia v3 is connected.".into(),
-                user: SafeUser::from(user),
+                user: SafeUser::from(&user.0),
             },
             shared,
         )
-        .await
+        .await?)
 }

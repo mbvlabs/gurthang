@@ -4,11 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "css:dev": "./bin/tailwindcli -i ./css/base.css -o ./assets/css/style.css --watch",
-    "css:build": "./bin/tailwindcli -i ./css/base.css -o ./assets/css/style.css --minify",
     "build:ssr": "vite build --config vite.ssr.config.ts",
-    "build": "npm run css:build && tsc --noEmit && vite build && npm run build:ssr",
-    "release": "npm run build && cargo build --release",
+    "build": "tsc --noEmit && vite build && npm run build:ssr",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

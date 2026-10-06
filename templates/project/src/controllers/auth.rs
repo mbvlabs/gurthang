@@ -17,8 +17,8 @@ use crate::{
         auth::{LoginProps, RegisterProps},
         shared::SharedProps,
     },
-    web::inertia::{InertiaRequest, mutation_redirect},
 };
+use gurthang_inertia::{InertiaRequest, mutation_redirect};
 
 const GENERIC_CREDENTIAL_ERROR: &str = "The email or password is incorrect.";
 
@@ -36,18 +36,18 @@ pub async fn new_login(
     headers: HeaderMap,
 ) -> Result<Response> {
     if auth.user.is_some() {
-        return mutation_redirect("/dashboard");
+        return Ok(mutation_redirect("/dashboard")?);
     }
     let email = take_old_email(&auth).await?;
     let shared = SharedProps::from_auth(&auth).await?;
-    state
+    Ok(state
         .inertia
         .render(
             &InertiaRequest::from_parts(&method, &uri, &headers),
             LoginProps { email },
             shared,
         )
-        .await
+        .await?)
 }
 
 pub async fn new_register(
@@ -58,18 +58,18 @@ pub async fn new_register(
     headers: HeaderMap,
 ) -> Result<Response> {
     if auth.user.is_some() {
-        return mutation_redirect("/dashboard");
+        return Ok(mutation_redirect("/dashboard")?);
     }
     let email = take_old_email(&auth).await?;
     let shared = SharedProps::from_auth(&auth).await?;
-    state
+    Ok(state
         .inertia
         .render(
             &InertiaRequest::from_parts(&method, &uri, &headers),
             RegisterProps { email },
             shared,
         )
-        .await
+        .await?)
 }
 
 pub async fn register(mut auth: AuthSession, request: Request) -> Result<Response> {
@@ -88,7 +88,7 @@ pub async fn register(mut auth: AuthSession, request: Request) -> Result<Respons
                 .await
                 .map_err(|error| AppError::Authentication(error.to_string()))?;
             flash(&auth, "Welcome! Your account is ready.").await?;
-            mutation_redirect("/dashboard")
+            Ok(mutation_redirect("/dashboard")?)
         }
         Err(RegistrationError::Validation(errors)) => {
             invalid(&auth, "/register", email, errors).await
@@ -124,7 +124,7 @@ pub async fn login(mut auth: AuthSession, request: Request) -> Result<Response> 
             .await
             .map_err(|error| AppError::Authentication(error.to_string()))?;
         flash(&auth, "Signed in successfully.").await?;
-        return mutation_redirect("/dashboard");
+        return Ok(mutation_redirect("/dashboard")?);
     }
     invalid(
         &auth,
@@ -140,7 +140,7 @@ pub async fn logout(mut auth: AuthSession) -> Result<Response> {
         .await
         .map_err(|error| AppError::Authentication(error.to_string()))?;
     flash(&auth, "Signed out successfully.").await?;
-    mutation_redirect("/login")
+    Ok(mutation_redirect("/login")?)
 }
 
 async fn invalid(
@@ -157,7 +157,7 @@ async fn invalid(
         .insert("old.email", email)
         .await
         .map_err(|error| AppError::Session(error.to_string()))?;
-    mutation_redirect(destination)
+    Ok(mutation_redirect(destination)?)
 }
 
 async fn take_old_email(auth: &AuthSession) -> Result<Option<String>> {

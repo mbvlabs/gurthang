@@ -1,0 +1,11 @@
+[package]
+name = "gurthang-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dotenvy.workspace = true
+gurthang-project = { path = "../gurthang-project" }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

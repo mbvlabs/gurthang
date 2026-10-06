@@ -1,8 +1,24 @@
 use axum_login::{AuthnBackend, UserId};
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
+use uuid::Uuid;
 
 use crate::models::user::{CreateUserData, User, UserError, normalize_email, validate};
+
+#[derive(Clone)]
+pub struct AuthUser(pub User);
+
+impl axum_login::AuthUser for AuthUser {
+    type Id = Uuid;
+
+    fn id(&self) -> Self::Id {
+        self.0.id
+    }
+
+    fn session_auth_hash(&self) -> &[u8] {
+        self.0.session_auth_hash()
+    }
+}
 
 #[derive(Clone)]
 pub struct AuthBackend {
@@ -32,7 +48,7 @@ impl AuthBackend {
         }
     }
 
-    pub async fn register(&self, data: CreateUserData) -> Result<User, RegistrationError> {
+    pub async fn register(&self, data: CreateUserData) -> Result<AuthUser, RegistrationError> {
         let errors = validate(&data);
         if !errors.is_empty() {
             return Err(RegistrationError::Validation(errors));
@@ -42,29 +58,27 @@ impl AuthBackend {
         let mut transaction = self.pool.begin().await?;
         let user = User::create(&mut transaction, email, hash).await?;
         transaction.commit().await?;
-        Ok(user)
+        Ok(AuthUser(user))
     }
 }
 
 impl AuthnBackend for AuthBackend {
-    type User = User;
+    type User = AuthUser;
     type Credentials = Credentials;
     type Error = AuthError;
 
     async fn authenticate(
         &self,
         credentials: Self::Credentials,
-    ) -> Result<Option<User>, AuthError> {
+    ) -> Result<Option<AuthUser>, AuthError> {
         let user = User::find_by_email(&self.pool, &credentials.email).await?;
         if let Some(user) = user {
             return Ok(user
                 .verify_password(credentials.password)
                 .await?
-                .then_some(user));
+                .then_some(AuthUser(user)));
         }
 
-        // Preserve roughly comparable Argon2 work for unknown accounts so the
-        // invalid-credentials response does not become an account oracle.
         let dummy = self
             .dummy_hash
             .get_or_try_init(|| User::hash_password("gurthang-dummy-password".into()))
@@ -81,8 +95,8 @@ impl AuthnBackend for AuthBackend {
         Ok(None)
     }
 
-    async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<User>, AuthError> {
-        Ok(User::find_by_id(&self.pool, *user_id).await?)
+    async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<AuthUser>, AuthError> {
+        Ok(User::find(&self.pool, *user_id).await?.map(AuthUser))
     }
 }
 
