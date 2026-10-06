@@ -114,7 +114,6 @@ scaffold! {
     ControllerWelcome => "src/controllers/welcome.rs",
     SrcApp => "src/app.rs",
     SrcError => "src/error.rs",
-    InitializerAuth => "src/initializers/auth.rs",
     InitializerMod => "src/initializers/mod.rs",
     InitializerViewEngine => "src/initializers/view_engine.rs",
     SrcLib => "src/lib.rs",

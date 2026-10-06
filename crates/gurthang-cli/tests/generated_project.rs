@@ -122,7 +122,6 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "askama.toml",
         "src/initializers/mod.rs",
         "src/initializers/view_engine.rs",
-        "src/initializers/auth.rs",
         "src/services/auth.rs",
         "src/routes/mod.rs",
         "src/routes/generated.rs",
@@ -270,6 +269,9 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(app.contains(".add_route(controllers::welcome::routes(ctx))"));
     assert!(app.contains("fn export_payloads()"));
     assert!(app.contains("async fn after_routes"));
+    assert!(app.contains("fn middlewares"));
+    assert!(app.contains("SessionAuthLayer"));
+    assert!(app.contains("RequireAuth"));
     assert!(app.contains("crate::assets::mount"));
     assert!(!app.contains("AssetsInitializer"));
     assert!(!app.contains("apply_http_layers"));

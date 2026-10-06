@@ -14,7 +14,11 @@ use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use tower::{Layer, Service};
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Etag {
@@ -25,6 +29,10 @@ pub struct Etag {
 impl MiddlewareLayer for Etag {
     fn name(&self) -> &'static str {
         "etag"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Post
     }
 
     fn is_enabled(&self) -> bool {

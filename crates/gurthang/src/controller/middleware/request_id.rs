@@ -2,7 +2,11 @@ use axum::{Router, extract::Request, http::HeaderValue, middleware::Next, respon
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 const X_REQUEST_ID: &str = "x-request-id";
 
@@ -18,6 +22,10 @@ pub struct RequestId {
 impl MiddlewareLayer for RequestId {
     fn name(&self) -> &'static str {
         "request_id"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Wrap
     }
 
     fn is_enabled(&self) -> bool {

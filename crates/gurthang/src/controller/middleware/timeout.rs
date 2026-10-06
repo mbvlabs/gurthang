@@ -5,11 +5,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::timeout::TimeoutLayer;
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TimeOut {
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enable: bool,
     #[serde(default = "default_timeout")]
     pub timeout: u64,
@@ -21,13 +25,21 @@ impl Default for TimeOut {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 fn default_timeout() -> u64 {
-    5_000
+    30_000
 }
 
 impl MiddlewareLayer for TimeOut {
     fn name(&self) -> &'static str {
         "timeout_request"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Wrap
     }
 
     fn is_enabled(&self) -> bool {

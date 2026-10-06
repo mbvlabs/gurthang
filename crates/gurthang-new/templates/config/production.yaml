@@ -11,10 +11,30 @@ server:
       enable: true
     request_id:
       enable: true
+    remote_ip:
+      enable: true
     csrf:
       enable: true
     session_auth:
       enable: true
+    telemetry:
+      enable: true
+    timeout_request:
+      enable: true
+      timeout: 30000
+    rate_limit:
+      enable: true
+      max_requests: 100
+      window_ms: 1000
+    authn:
+      enable: true
+      public_paths:
+        - /
+        - /login
+        - /register
+        - /assets
+      redirect: /login
+      status: 401
     static:
       enable: true
       must_exist: false

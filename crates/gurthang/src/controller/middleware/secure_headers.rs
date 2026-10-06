@@ -15,7 +15,7 @@ use serde_json::json;
 
 use crate::{
     app::Context,
-    controller::middleware::MiddlewareLayer,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
     error::{Error, Result},
 };
 
@@ -76,6 +76,10 @@ impl SecureHeader {
 impl MiddlewareLayer for SecureHeader {
     fn name(&self) -> &'static str {
         "secure_headers"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Post
     }
 
     fn is_enabled(&self) -> bool {

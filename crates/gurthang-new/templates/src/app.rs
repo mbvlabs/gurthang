@@ -46,11 +46,38 @@ impl Hooks for App {
 
     fn register_tasks(_tasks: &mut Tasks) {}
 
+    fn middlewares(ctx: &Context) -> MiddlewareStack {
+        let mut stack = default_middleware_stack(ctx);
+        stack.replace(
+            "session_auth",
+            Box::new(session_auth::SessionAuthLayer::new(
+                crate::services::auth::AuthBackend::new(ctx.db.clone()),
+                ctx,
+            )),
+        );
+        stack.replace(
+            "authn",
+            Box::new(authn::RequireAuth::<crate::services::auth::AuthBackend>::new(
+                authn::Config {
+                    enable: true,
+                    public_paths: vec![
+                        "/".into(),
+                        "/login".into(),
+                        "/register".into(),
+                        "/assets".into(),
+                    ],
+                    redirect: Some(crate::routes::auth::LOGIN.path.to_string()),
+                    status: 401,
+                },
+            )),
+        );
+        stack
+    }
+
     async fn initializers(_ctx: &Context) -> Result<Vec<Box<dyn Initializer>>> {
-        Ok(vec![
-            Box::new(initializers::view_engine::ViewEngineInitializer),
-            Box::new(initializers::auth::AuthInitializer),
-        ])
+        Ok(vec![Box::new(
+            initializers::view_engine::ViewEngineInitializer,
+        )])
     }
 
     fn export_payloads() -> Result<()> {

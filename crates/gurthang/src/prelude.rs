@@ -1,11 +1,11 @@
 pub use crate::{
     AppRoutes, BootResult, Config, Context, Email, EmailSender, Environment, Error, Hooks,
-    Initializer, Mailer, MailerWorker, MiddlewareLayer, MiddlewareStackExt, StartMode, Task,
-    TaskInfo, Tasks, create_app, default_middleware_stack,
+    Initializer, Mailer, MailerWorker, MiddlewareKind, MiddlewareLayer, MiddlewareStack, StartMode,
+    Task, TaskInfo, Tasks, create_app, default_middleware_stack,
     http::{AssetResolver, PostgresSessionStore, Route, mount, on, protect},
     inertia::{InertiaRenderer, InertiaRequest, InertiaSsr, SsrOptions, mutation_redirect},
     jobs::{JobQueue, JobWorker, PerformJob, WorkerConfig},
-    session_auth,
+    authn, session_auth,
 };
 pub use async_trait::async_trait;
 pub use axum::{

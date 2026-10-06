@@ -2,7 +2,11 @@ use axum::{Router, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use tower_http::catch_panic::CatchPanicLayer;
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CatchPanic {
@@ -26,6 +30,10 @@ fn handle_panic(err: Box<dyn std::any::Any + Send + 'static>) -> axum::response:
 impl MiddlewareLayer for CatchPanic {
     fn name(&self) -> &'static str {
         "catch_panic"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Wrap
     }
 
     fn is_enabled(&self) -> bool {

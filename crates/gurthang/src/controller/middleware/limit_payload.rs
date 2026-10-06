@@ -1,7 +1,11 @@
 use axum::Router;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum BodyLimit {
@@ -93,6 +97,10 @@ fn default_body_limit() -> BodyLimit {
 impl MiddlewareLayer for LimitPayload {
     fn name(&self) -> &'static str {
         "limit_payload"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Wrap
     }
 
     fn is_enabled(&self) -> bool {

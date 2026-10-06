@@ -10,7 +10,7 @@ use tokio::sync::watch;
 use crate::{
     boot::{AppRoutes, BootResult, StartMode},
     config::{Config, Environment},
-    controller::middleware::{MiddlewareLayer, default_middleware_stack},
+    controller::middleware::{MiddlewareStack, default_middleware_stack},
     error::Result,
     mailer::EmailSender,
     task::Tasks,
@@ -111,7 +111,7 @@ pub trait Hooks: Sized {
 
     fn register_tasks(tasks: &mut Tasks);
 
-    fn middlewares(ctx: &Context) -> Vec<Box<dyn MiddlewareLayer>> {
+    fn middlewares(ctx: &Context) -> MiddlewareStack {
         default_middleware_stack(ctx)
     }
 

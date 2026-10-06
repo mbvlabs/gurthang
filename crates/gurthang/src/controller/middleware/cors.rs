@@ -7,7 +7,7 @@ use tower_http::cors::{self, Any};
 
 use crate::{
     app::Context,
-    controller::middleware::MiddlewareLayer,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
     error::{Error, Result},
 };
 
@@ -150,6 +150,10 @@ fn parse_name(value: &str) -> Result<axum::http::HeaderName> {
 impl MiddlewareLayer for Cors {
     fn name(&self) -> &'static str {
         "cors"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Wrap
     }
 
     fn is_enabled(&self) -> bool {
