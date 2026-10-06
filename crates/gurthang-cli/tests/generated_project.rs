@@ -39,6 +39,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(cargo.contains("gurthang-inertia"));
     assert!(cargo.contains("gurthang-jobs"));
     assert!(cargo.contains("gurthang-http"));
+    assert!(!cargo.contains("tower-sessions-sqlx-store"));
     assert!(cargo.contains("[workspace]"));
     assert!(cargo.contains("default-run = \"sample-app\""));
     assert!(cargo.contains("sample_app_models"));
@@ -134,6 +135,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
 
     let user = fs::read_to_string(destination.join("models/src/user.rs")).unwrap();
     assert!(user.contains("sqlx::query_as!"));
+    assert!(user.contains("SELECT id, email, password_hash, created_at, updated_at FROM users"));
+    assert!(!user.contains("created_at: _"));
     assert!(user.contains("gurthang:custom:start"));
     assert!(!user.contains("impl AuthUser for User"));
 

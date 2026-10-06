@@ -11,14 +11,13 @@ use std::{io, sync::Arc};
 
 use axum::{Router, extract::FromRef, middleware, routing::get};
 use axum_login::AuthManagerLayerBuilder;
-use gurthang_http::AssetResolver;
+use gurthang_http::{AssetResolver, PostgresSessionStore};
 use gurthang_inertia::{InertiaRenderer, InertiaSsr, SsrOptions};
 use gurthang_jobs::{JobQueue, JobWorker, WorkerConfig};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::{net::TcpListener, sync::watch};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tower_sessions::{Expiry, SessionManagerLayer, cookie::SameSite};
-use tower_sessions_sqlx_store::PostgresStore;
 use tracing_subscriber::EnvFilter;
 
 use crate::{
@@ -83,7 +82,7 @@ impl FromRef<App> for JobQueue {
 fn build_router(app: App) -> Router {
     let is_development = app.config.is_development();
     let session_secure = app.config.session_secure;
-    let session_store = PostgresStore::new(app.database.clone());
+    let session_store = PostgresSessionStore::new(app.database.clone());
     let session_layer = SessionManagerLayer::new(session_store)
         .with_name("gurthang.sid")
         .with_http_only(true)
