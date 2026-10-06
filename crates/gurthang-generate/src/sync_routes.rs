@@ -34,7 +34,7 @@ pub fn sync(check: bool, out: &mut impl Write) -> Result<(), Error> {
     writeln!(out, "Wrote src/controllers/mod.rs")?;
     writeln!(out, "Wrote src/routes/generated.rs")?;
     Ok(())
-
+}
 
 #[derive(Clone, Debug)]
 struct JsRoute {
