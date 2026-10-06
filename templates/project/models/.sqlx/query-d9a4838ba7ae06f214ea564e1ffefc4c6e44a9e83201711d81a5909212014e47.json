@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, email, password_hash, created_at, updated_at FROM users WHERE id = $1",
+  "describe": {
+    "columns": [
+      { "ordinal": 0, "name": "id", "type_info": "Uuid" },
+      { "ordinal": 1, "name": "email", "type_info": "Text" },
+      { "ordinal": 2, "name": "password_hash", "type_info": "Text" },
+      { "ordinal": 3, "name": "created_at", "type_info": "Timestamptz" },
+      { "ordinal": 4, "name": "updated_at", "type_info": "Timestamptz" }
+    ],
+    "parameters": { "Left": ["Uuid"] },
+    "nullable": [false, false, false, false, false]
+  },
+  "hash": "d9a4838ba7ae06f214ea564e1ffefc4c6e44a9e83201711d81a5909212014e47"
+}

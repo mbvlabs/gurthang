@@ -1,0 +1,14 @@
+[package]
+name = "gurthang-run"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ctrlc.workspace = true
+gurthang-project = { path = "../gurthang-project" }
+nix = { version = "0.30", features = ["signal"] }
+notify.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

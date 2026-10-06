@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "models"]
+resolver = "2"
+
 [package]
 name = "__GURTHANG_PROJECT_NAME__"
 version = "0.1.0"
@@ -11,34 +15,48 @@ path = "src/lib.rs"
 name = "__GURTHANG_PROJECT_NAME__"
 path = "src/main.rs"
 
+[[bin]]
+name = "seed"
+path = "src/bin/seed.rs"
+
+[[bin]]
+name = "export_payloads"
+path = "src/bin/export_payloads.rs"
+
 [dependencies]
-argon2 = "0.5"
+__GURTHANG_CRATE_NAME___models = { path = "models" }
 axum = "0.8"
 axum-login = "0.18"
 chrono = { version = "0.4", features = ["serde"] }
-datastar = { version = "0.3", features = ["axum"] }
 dotenvy = "0.15"
+gurthang-http = { path = "__GURTHANG_SOURCE__/crates/gurthang-http" }
+gurthang-inertia = { path = "__GURTHANG_SOURCE__/crates/gurthang-inertia" }
+gurthang-jobs = { path = "__GURTHANG_SOURCE__/crates/gurthang-jobs" }
 include_dir = "0.7"
-mime_guess = "2"
-notify = "8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7"
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
-tera = "1.20"
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "uuid",
+    "chrono",
+    "migrate",
+] }
 thiserror = "2"
 time = "0.3"
-tokio = { version = "1", features = ["full"] }
-tokio-stream = "0.1"
+tokio = { version = "1", default-features = false, features = [
+    "macros",
+    "rt-multi-thread",
+    "signal",
+    "net",
+    "time",
+    "sync",
+] }
 tower-http = { version = "0.6", features = ["fs", "trace"] }
-tower-livereload = "0.10"
 tower-sessions = "=0.14.0"
 tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ts-rs = { version = "11", features = ["uuid-impl"] }
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
-
-[dev-dependencies]
-tempfile = "3"
-tower = { version = "0.5", features = ["util"] }

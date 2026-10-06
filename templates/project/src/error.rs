@@ -11,16 +11,14 @@ pub enum AppError {
     Config(String),
     #[error("database operation failed")]
     Database(#[from] sqlx::Error),
-    #[error("template rendering failed")]
-    Template(#[from] tera::Error),
     #[error("response serialization failed")]
     Serialization(#[from] serde_json::Error),
     #[error("background job operation failed")]
-    Jobs(#[from] crate::jobs::JobError),
+    Jobs(#[from] gurthang_jobs::Error),
+    #[error("inertia rendering failed")]
+    Inertia(#[from] gurthang_inertia::Error),
     #[error("asset configuration error: {0}")]
     Asset(String),
-    #[error("development reload error: {0}")]
-    Development(String),
     #[error("session operation failed: {0}")]
     Session(String),
     #[error("authentication operation failed: {0}")]
@@ -47,11 +45,10 @@ impl IntoResponse for AppError {
             }
             Self::Config(_)
             | Self::Database(_)
-            | Self::Template(_)
             | Self::Serialization(_)
             | Self::Jobs(_)
+            | Self::Inertia(_)
             | Self::Asset(_)
-            | Self::Development(_)
             | Self::Session(_)
             | Self::Authentication(_)
             | Self::Internal => {

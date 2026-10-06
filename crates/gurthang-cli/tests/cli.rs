@@ -8,7 +8,14 @@ fn help_and_version_are_available() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("new").and(predicate::str::contains("run")));
+        .stdout(
+            predicate::str::contains("new")
+                .and(predicate::str::contains("run"))
+                .and(predicate::str::contains("generate"))
+                .and(predicate::str::contains("sync"))
+                .and(predicate::str::contains("db"))
+                .and(predicate::str::contains("build")),
+        );
 
     Command::cargo_bin("gurthang")
         .unwrap()
@@ -17,6 +24,14 @@ fn help_and_version_are_available() {
         .assert()
         .success()
         .stdout(predicate::str::contains("live reload"));
+
+    Command::cargo_bin("gurthang")
+        .unwrap()
+        .arg("generate")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("migration").and(predicate::str::contains("model")));
 
     Command::cargo_bin("gurthang")
         .unwrap()

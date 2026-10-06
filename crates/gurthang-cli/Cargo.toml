@@ -3,6 +3,8 @@ name = "gurthang-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Create and develop a Linux Gurthang application"
 
 [[bin]]
 name = "gurthang"
@@ -10,14 +12,13 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
-ctrlc.workspace = true
-include_dir.workspace = true
-notify.workspace = true
-tempfile.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", features = ["signal"] }
+gurthang-build = { path = "../gurthang-build" }
+gurthang-db = { path = "../gurthang-db" }
+gurthang-generate = { path = "../gurthang-generate" }
+gurthang-new = { path = "../gurthang-new" }
+gurthang-run = { path = "../gurthang-run" }
 
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"
+tempfile.workspace = true

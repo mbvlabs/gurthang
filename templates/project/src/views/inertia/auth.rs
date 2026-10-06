@@ -1,7 +1,7 @@
 use serde::Serialize;
 use ts_rs::TS;
 
-use super::{InertiaPage, InertiaRenderMode};
+use gurthang_inertia::{InertiaPage, InertiaRenderMode};
 
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]

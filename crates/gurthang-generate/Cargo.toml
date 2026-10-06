@@ -1,0 +1,15 @@
+[package]
+name = "gurthang-generate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dotenvy.workspace = true
+gurthang-project = { path = "../gurthang-project" }
+heck.workspace = true
+sqlx.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,17 +1,17 @@
 use std::{fs, path::Path};
 
-use gurthang_cli::{cli::NewArgs, new, renderer};
+use gurthang_new::{self, manifest};
 
 #[test]
 fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let temp = tempfile::tempdir().unwrap();
     let destination = temp.path().join("generated");
-    new::execute(
-        NewArgs {
-            name: "sample-app".into(),
-            path: Some(destination.clone()),
-            dry_run: false,
-        },
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    gurthang_new::execute(
+        "sample-app",
+        Some(destination.clone()),
+        false,
+        &source,
         &mut Vec::new(),
     )
     .unwrap();
@@ -19,7 +19,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let mut actual = Vec::new();
     collect_files(&destination, &destination, &mut actual);
     actual.sort();
-    assert_eq!(actual, renderer::manifest());
+    assert_eq!(actual, manifest());
 
     for path in &actual {
         let bytes = fs::read(destination.join(path)).unwrap();
@@ -34,119 +34,121 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
     assert!(cargo.contains("name = \"sample-app\""));
     assert!(cargo.contains("name = \"sample_app\""));
+    assert!(cargo.contains("gurthang-inertia"));
+    assert!(cargo.contains("gurthang-jobs"));
+    assert!(cargo.contains("gurthang-http"));
+    assert!(cargo.contains("[workspace]"));
+    assert!(cargo.contains("sample_app_models"));
+    assert!(!cargo.contains("tera"));
+    assert!(!cargo.contains("datastar"));
+    assert!(!cargo.contains("src/domain"));
+
+    let models_cargo = fs::read_to_string(destination.join("models/Cargo.toml")).unwrap();
+    assert!(models_cargo.contains("name = \"sample_app_models\""));
+    assert!(models_cargo.contains("macros"));
+
     let package = fs::read_to_string(destination.join("package.json")).unwrap();
     assert!(package.contains("\"name\": \"sample-app\""));
+    assert!(package.contains("\"dev\": \"vite\""));
+    assert!(!package.contains("css:build"));
+    assert!(!package.contains("tailwindcli"));
+
     let readme = fs::read_to_string(destination.join("README.md")).unwrap();
     for command in [
-        "./bin/install-tailwindcli",
         "npm install",
-        "npm run css:build",
-        "sqlx migrate run",
+        "gurthang db create",
+        "gurthang db migrate up",
         "gurthang run",
     ] {
         assert!(readme.contains(command), "README is missing {command}");
     }
+    assert!(!readme.contains("./bin/install-tailwindcli"));
+    assert!(!readme.contains("sqlx migrate run"));
+
     for required in [
+        "gurthang.toml",
+        ".env.example",
+        ".cargo/config.toml",
+        "models/.sqlx/.gitkeep",
+        "models/src/user.rs",
+        "models/src/sessions.rs",
+        "models/src/factories/user.rs",
         "migrations/0001_create_users.sql",
         "migrations/0002_create_sessions.sql",
         "migrations/0003_create_background_jobs.sql",
         "src/app.rs",
+        "src/models.rs",
+        "src/bin/seed.rs",
+        "src/bin/export_payloads.rs",
         "src/controllers/auth.rs",
         "src/controllers/dashboard.rs",
-        "src/models/user.rs",
+        "src/controllers/welcome.rs",
         "src/jobs/mod.rs",
-        "src/jobs/queue.rs",
-        "src/jobs/worker.rs",
         "src/services/auth.rs",
-        "src/web/csrf.rs",
-        "src/web/datastar.rs",
-        "src/web/development.rs",
-        "src/web/inertia/response.rs",
-        "src/web/inertia/ssr.rs",
-        "bin/install-tailwindcli",
+        "src/routes/mod.rs",
+        "src/routes/welcome.rs",
+        "src/routes/auth.rs",
+        "src/routes/dashboard.rs",
+        "src/views/inertia/welcome.rs",
+        "src/web/assets.rs",
         "css/base.css",
-        "assets/css/.gitkeep",
+        "assets/.gitkeep",
+        "resources/js/Pages/Welcome.tsx",
         "resources/js/Pages/Auth/Login.tsx",
-        "resources/js/Pages/Auth/Register.tsx",
         "resources/js/ssr.tsx",
+        "resources/js/routes.ts",
         "vite.ssr.config.ts",
         "build.rs",
-        "templates/fragments/counter.html",
-        "tests/auth.rs",
-        "tests/jobs.rs",
-        "tests/web.rs",
-        "templates/pages/home.html",
     ] {
         assert!(destination.join(required).is_file(), "missing {required}");
     }
 
-    let inertia_entry = fs::read_to_string(destination.join("resources/js/app.tsx")).unwrap();
-    assert!(inertia_entry.contains("../../css/base.css"));
-    let tera_layout = fs::read_to_string(destination.join("templates/layouts/base.html")).unwrap();
-    assert!(tera_layout.contains("/assets/css/style.css"));
-    let routes = fs::read_to_string(destination.join("src/routes.rs")).unwrap();
-    assert!(routes.contains("ServeDir::new(\"assets\")"));
-    let package = fs::read_to_string(destination.join("package.json")).unwrap();
-    assert!(package.contains("./bin/tailwindcli -i ./css/base.css"));
-    assert!(package.contains("\"dev\": \"vite\""));
-    assert!(package.contains("\"build:ssr\""));
-    assert!(package.contains("\"release\""));
-
-    let ssr = fs::read_to_string(destination.join("src/web/inertia/ssr.rs")).unwrap();
-    assert!(ssr.contains("kill_on_drop(true)"));
-    let config = fs::read_to_string(destination.join("src/config.rs")).unwrap();
-    assert!(config.contains("INERTIA_SSR_RUNTIME"));
-    assert!(!config.contains("INERTIA_SSR_ENABLED"));
-    let page_contract = fs::read_to_string(destination.join("src/views/inertia/mod.rs")).unwrap();
-    assert!(page_contract.contains("const RENDER_MODE: InertiaRenderMode"));
-    assert!(page_contract.contains("InertiaRenderMode::Client"));
-    let dashboard = fs::read_to_string(destination.join("src/views/inertia/dashboard.rs")).unwrap();
-    assert!(dashboard.contains("InertiaRenderMode::Ssr"));
-    let auth_pages = fs::read_to_string(destination.join("src/views/inertia/auth.rs")).unwrap();
-    assert!(auth_pages.contains("InertiaRenderMode::Client"));
-    let app = fs::read_to_string(destination.join("resources/js/app.tsx")).unwrap();
-    assert!(app.contains("hydrateRoot"));
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        let mode = fs::metadata(destination.join("bin/install-tailwindcli"))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_ne!(mode & 0o111, 0, "Tailwind installer is not executable");
-    }
-
-    let dependencies = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
-    assert!(dependencies.contains(r#"features = ["v4", "v7", "serde"]"#));
-    for dependency in [
-        "argon2",
-        "axum-login",
-        "datastar",
-        "include_dir",
-        "mime_guess",
-        "notify",
-        "tower-livereload",
-        "tower-sessions-sqlx-store",
+    for forbidden in [
+        "tests/auth.rs",
+        "src/models/user.rs",
+        "templates/pages/home.html",
+        "src/web/datastar.rs",
+        "src/web/tera.rs",
+        "src/controllers/pages.rs",
+        "src/routes.rs",
+        "bin/install-tailwindcli",
+        "src/domain/mod.rs",
+        "crates/gurthang-inertia/Cargo.toml",
     ] {
-        assert!(dependencies.contains(dependency), "missing {dependency}");
+        assert!(
+            !destination.join(forbidden).exists(),
+            "should not ship {forbidden}"
+        );
     }
 
-    let session_migration =
-        fs::read_to_string(destination.join("migrations/0002_create_sessions.sql")).unwrap();
-    for column in ["id TEXT", "data BYTEA", "expiry_date TIMESTAMPTZ"] {
-        assert!(session_migration.contains(column), "missing {column}");
-    }
+    let mold = fs::read_to_string(destination.join(".cargo/config.toml")).unwrap();
+    assert!(mold.contains("fuse-ld=mold"));
 
-    let jobs = fs::read_to_string(destination.join("src/jobs/worker.rs")).unwrap();
-    assert!(jobs.contains("FOR UPDATE SKIP LOCKED"));
-    assert!(jobs.contains("PgListener"));
-    let job_migration =
-        fs::read_to_string(destination.join("migrations/0003_create_background_jobs.sql")).unwrap();
-    assert!(job_migration.contains("payload JSONB"));
-    assert!(job_migration.contains("id UUID PRIMARY KEY"));
-    assert!(job_migration.contains("locked_by UUID"));
+    let env = fs::read_to_string(destination.join(".env.example")).unwrap();
+    assert!(env.contains("SQLX_OFFLINE=true"));
+
+    let user = fs::read_to_string(destination.join("models/src/user.rs")).unwrap();
+    assert!(user.contains("sqlx::query_as!"));
+    assert!(user.contains("gurthang:custom:start"));
+    assert!(!user.contains("impl AuthUser for User"));
+
+    let controllers = fs::read_to_string(destination.join("src/controllers/dashboard.rs")).unwrap();
+    assert!(!controllers.contains("sqlx::query"));
+
+    let auth = fs::read_to_string(destination.join("src/services/auth.rs")).unwrap();
+    assert!(auth.contains("impl axum_login::AuthUser for AuthUser"));
+
+    let jobs = fs::read_to_string(destination.join("src/jobs/mod.rs")).unwrap();
+    assert!(!jobs.contains("sqlx::query!"));
+    assert!(jobs.contains("purge_expired"));
+    assert!(jobs.contains("impl PerformJob for Job"));
+
+    let sessions = fs::read_to_string(destination.join("models/src/sessions.rs")).unwrap();
+    assert!(sessions.contains("sqlx::query!"));
+
+    let welcome_page =
+        fs::read_to_string(destination.join("src/views/inertia/welcome.rs")).unwrap();
+    assert!(welcome_page.contains("InertiaRenderMode::Client"));
 }
 
 fn collect_files(root: &Path, directory: &Path, output: &mut Vec<String>) {
