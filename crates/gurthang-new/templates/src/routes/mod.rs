@@ -1,2 +1,1 @@
-mod generated;
-pub use generated::*;
+include!("generated.rs");

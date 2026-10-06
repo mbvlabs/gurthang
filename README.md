@@ -22,6 +22,9 @@ gurthang sync payloads
 gurthang sync factory <Name> [--check]
 gurthang sync factories --check|--sync
 
+gurthang routes
+gurthang task [name]
+
 gurthang db create | drop | nuke | rebuild
 gurthang db migrate up | status
 gurthang db seed [name] [--list]
@@ -31,12 +34,10 @@ gurthang tools [check|sync]
 gurthang build
 ```
 
-The generated app is MVC (`models`, `controllers`, `services`, `jobs`) plus an
+The generated app is MVC (`models`, `controllers`, `services`, `workers`) plus an
 Andurel-style `routes/` catalog. Route constants hold a name and path; HTTP
-methods are declared when `mount!` binds a controller method. Inertia page
-props live on the controllers. Stable protocol code lives in Gurthang crates
-(`gurthang-inertia`, `gurthang-jobs`, `gurthang-http`). Controllers never own
-SQL.
+methods are declared when `mount!` binds a controller method. Apps depend on the
+`gurthang` prelude crate. Controllers never own SQL.
 
 `query!` / `query_as!` live in a separate `models` crate so a controller edit
 does not rebuild database macros. Generate and sync refresh offline SQLx data
@@ -140,16 +141,19 @@ does not publish.
 my-app/
   Cargo.toml              # workspace: app package + models crate
   gurthang.toml
+  config/                 # development.yaml, test.yaml, production.yaml
   models/                 # query! / query_as! live only here
     src/user.rs
     .sqlx/
   src/
-    main.rs               # thin
-    lib.rs                # App, mount!, export_payloads, process modes
-    controllers/          # structs that hold state, handlers, Inertia props
+    main.rs               # gurthang::start::<App>
+    lib.rs                # module list
+    app.rs                # struct App; impl Hooks
+    controllers/          # each owns routes() via mount!
     routes/               # named route catalog (name + path)
     services/
-    jobs/
+    workers/
+    tasks/ mailers/ initializers/
   resources/js/
   migrations/
 ```

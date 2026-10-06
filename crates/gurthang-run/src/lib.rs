@@ -141,8 +141,10 @@ fn backend_change(root: &Path, event: notify::Result<Event>, out: &mut impl Writ
     }
 
     let source = root.join("src");
+    let config = root.join("config");
     Ok(event.paths.iter().any(|path| {
         (path.starts_with(&source) && path.extension().is_some_and(|extension| extension == "rs"))
+            || path.starts_with(&config)
             || (path.parent() == Some(root)
                 && path.file_name().is_some_and(|name| {
                     name == "Cargo.toml" || name == ".env" || name == "gurthang.toml"
@@ -158,6 +160,12 @@ fn watch_project(root: &Path, sender: Sender<DevelopmentEvent>) -> Result<Recomm
     watcher
         .watch(&root.join("src"), RecursiveMode::Recursive)
         .map_err(|error| Error::Development(format!("could not watch src: {error}")))?;
+    let config = root.join("config");
+    if config.is_dir() {
+        watcher
+            .watch(&config, RecursiveMode::Recursive)
+            .map_err(|error| Error::Development(format!("could not watch config: {error}")))?;
+    }
     watcher
         .watch(root, RecursiveMode::NonRecursive)
         .map_err(|error| Error::Development(format!("could not watch project root: {error}")))?;

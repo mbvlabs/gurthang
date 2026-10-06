@@ -30,14 +30,18 @@ pub struct WorkerConfig {
 }
 
 impl WorkerConfig {
-    pub fn from_env() -> Result<Self> {
-        let concurrency = positive_usize("JOB_WORKERS", 4)?;
-        let poll_interval = Duration::from_millis(positive_u64("JOB_POLL_INTERVAL_MS", 1_000)?);
-        let lease = Duration::from_secs(positive_u64("JOB_LEASE_SECONDS", 300)?);
-        let job_timeout = Duration::from_secs(positive_u64("JOB_TIMEOUT_SECONDS", 240)?);
+    pub fn new(
+        concurrency: usize,
+        poll_interval: Duration,
+        lease: Duration,
+        job_timeout: Duration,
+    ) -> Result<Self> {
+        if concurrency == 0 {
+            return Err(Error::Config("worker concurrency must be greater than zero".into()));
+        }
         if job_timeout >= lease {
             return Err(Error::Config(
-                "JOB_TIMEOUT_SECONDS must be less than JOB_LEASE_SECONDS".into(),
+                "job timeout must be less than the job lease".into(),
             ));
         }
         Ok(Self {
@@ -46,6 +50,15 @@ impl WorkerConfig {
             lease,
             job_timeout,
         })
+    }
+
+    pub fn from_env() -> Result<Self> {
+        Self::new(
+            positive_usize("JOB_WORKERS", 4)?,
+            Duration::from_millis(positive_u64("JOB_POLL_INTERVAL_MS", 1_000)?),
+            Duration::from_secs(positive_u64("JOB_LEASE_SECONDS", 300)?),
+            Duration::from_secs(positive_u64("JOB_TIMEOUT_SECONDS", 240)?),
+        )
     }
 }
 

@@ -16,6 +16,7 @@ gurthang-build = { path = "../gurthang-build" }
 gurthang-db = { path = "../gurthang-db" }
 gurthang-generate = { path = "../gurthang-generate" }
 gurthang-new = { path = "../gurthang-new" }
+gurthang-project = { path = "../gurthang-project" }
 gurthang-run = { path = "../gurthang-run" }
 gurthang-tools = { path = "../gurthang-tools" }
 

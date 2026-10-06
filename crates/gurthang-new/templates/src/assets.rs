@@ -1,7 +1,7 @@
 use axum::{extract::Path as AxumPath, response::Response};
 use include_dir::{Dir, include_dir};
 
-use gurthang_http::embedded_response;
+use gurthang::http::embedded_response;
 
 static BUILD_ASSETS: Dir<'_> = include_dir!("$OUT_DIR/dist");
 static PUBLIC_ASSETS: Dir<'_> = include_dir!("$OUT_DIR/assets");

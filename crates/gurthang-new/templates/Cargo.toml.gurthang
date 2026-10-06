@@ -2,10 +2,48 @@
 members = [".", "models"]
 resolver = "2"
 
-[package]
-name = "{{ project_name }}"
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+
+[workspace.dependencies]
+argon2 = "0.5"
+axum = "0.8"
+axum-login = "0.18"
+chrono = { version = "0.4", features = ["serde"] }
+dotenvy = "0.15"
+gurthang = { path = "{{ source }}/crates/gurthang" }
+include_dir = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_urlencoded = "0.7"
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "macros",
+    "postgres",
+    "uuid",
+    "chrono",
+    "migrate",
+] }
+thiserror = "2"
+tokio = { version = "1", default-features = false, features = [
+    "macros",
+    "rt-multi-thread",
+    "rt",
+    "signal",
+    "net",
+    "time",
+    "sync",
+] }
+tracing = "0.1"
+ts-rs = { version = "11", features = ["uuid-impl"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+{{ crate_name }}_models = { path = "models" }
+
+[package]
+name = "{{ project_name }}"
+version.workspace = true
+edition.workspace = true
 default-run = "{{ project_name }}"
 
 [lib]
@@ -25,38 +63,21 @@ name = "export_payloads"
 path = "src/bin/export_payloads.rs"
 
 [dependencies]
-{{ crate_name }}_models = { path = "models" }
-axum = "0.8"
-axum-login = "0.18"
-chrono = { version = "0.4", features = ["serde"] }
-dotenvy = "0.15"
-gurthang-http = { path = "{{ source }}/crates/gurthang-http" }
-gurthang-inertia = { path = "{{ source }}/crates/gurthang-inertia" }
-gurthang-jobs = { path = "{{ source }}/crates/gurthang-jobs" }
-include_dir = "0.7"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_urlencoded = "0.7"
-sqlx = { version = "0.8", default-features = false, features = [
-    "runtime-tokio-rustls",
-    "postgres",
-    "uuid",
-    "chrono",
-    "migrate",
-] }
-thiserror = "2"
-time = "0.3"
-tokio = { version = "1", default-features = false, features = [
-    "macros",
-    "rt-multi-thread",
-    "signal",
-    "net",
-    "time",
-    "sync",
-] }
-tower-http = { version = "0.6", features = ["fs", "trace"] }
-tower-sessions = "=0.14.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-ts-rs = { version = "11", features = ["uuid-impl"] }
-uuid = { version = "1", features = ["v4", "v7", "serde"] }
+{{ crate_name }}_models.workspace = true
+argon2.workspace = true
+async-trait = "0.1"
+axum.workspace = true
+axum-login.workspace = true
+chrono.workspace = true
+dotenvy.workspace = true
+gurthang.workspace = true
+include_dir.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_urlencoded.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+ts-rs.workspace = true
+uuid.workspace = true

@@ -12,7 +12,7 @@ pub fn sync(check: bool, out: &mut impl Write) -> Result<(), Error> {
     }
     let mut catalog = Vec::new();
     collect_catalog(&directory, &mut catalog)?;
-    let methods = parse_mount(&fs::read_to_string(root.join("src/lib.rs"))?);
+    let methods = collect_methods(&root)?;
     let mut routes = Vec::new();
     for route in catalog {
         let Some(method) = methods.get(&route.ident) else {
@@ -47,6 +47,81 @@ pub fn sync(check: bool, out: &mut impl Write) -> Result<(), Error> {
     writeln!(out, "Wrote resources/js/routes.ts")?;
     writeln!(out, "Wrote src/controllers/mod.rs")?;
     writeln!(out, "Wrote src/routes/generated.rs")?;
+    Ok(())
+}
+
+fn collect_methods(root: &Path) -> Result<BTreeMap<String, String>, Error> {
+    let mut methods = BTreeMap::new();
+    collect_mounts(&root.join("src/controllers"), &mut methods)?;
+    Ok(methods)
+}
+
+fn collect_mounts(directory: &Path, methods: &mut BTreeMap<String, String>) -> Result<(), Error> {
+    if !directory.is_dir() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_mounts(&path, methods)?;
+            continue;
+        }
+        if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
+            continue;
+        }
+        for (ident, verb) in parse_mount(&fs::read_to_string(&path)?) {
+            methods.insert(ident, verb);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+pub struct ListedRoute {
+    pub name: String,
+    pub method: String,
+    pub path: String,
+}
+
+pub fn listed_routes(root: &Path) -> Result<Vec<ListedRoute>, Error> {
+    let directory = root.join("src/routes");
+    if !directory.is_dir() {
+        return Err(Error::Message("src/routes is missing".into()));
+    }
+    let mut catalog = Vec::new();
+    collect_catalog(&directory, &mut catalog)?;
+    let methods = collect_methods(root)?;
+    let mut routes = Vec::new();
+    for route in catalog {
+        let Some(method) = methods.get(&route.ident) else {
+            continue;
+        };
+        routes.push(ListedRoute {
+            name: route.name,
+            method: method.clone(),
+            path: route.path,
+        });
+    }
+    routes.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(routes)
+}
+
+pub fn print(out: &mut impl Write) -> Result<(), Error> {
+    let root = find_root()?;
+    let routes = listed_routes(&root)?;
+    if routes.is_empty() {
+        writeln!(out, "No mounted routes.")?;
+        return Ok(());
+    }
+    let name_width = routes.iter().map(|route| route.name.len()).max().unwrap_or(8);
+    for route in routes {
+        writeln!(
+            out,
+            "{:<name_width$} {:<7} {}",
+            route.name, route.method, route.path
+        )?;
+    }
     Ok(())
 }
 
@@ -181,9 +256,9 @@ pub const LOGIN: Route = Route {
 
         let methods = parse_mount(
             r#"
-    let router = gurthang_http::mount!(app, {
-        routes::auth::LOGIN => get(app.auth, Auth::new_login),
-        routes::auth::LOGIN_CREATE => post(app.auth, Auth::login),
+    mount!(auth, {
+        crate::routes::auth::LOGIN => get(auth, Auth::new_login),
+        crate::routes::auth::LOGIN_CREATE => post(auth, Auth::login),
     });
 "#,
         );

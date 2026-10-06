@@ -3,7 +3,7 @@ use serde::Serialize;
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::{WAKE_CHANNEL, error::{Error, Result}};
+use crate::{WAKE_CHANNEL, error::Result};
 
 const DEFAULT_MAX_ATTEMPTS: i32 = 5;
 

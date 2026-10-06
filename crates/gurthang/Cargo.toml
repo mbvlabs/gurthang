@@ -1,0 +1,36 @@
+[package]
+name = "gurthang"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "App-facing Gurthang library: boot, Hooks, Context, and prelude"
+
+[dependencies]
+async-trait.workspace = true
+axum.workspace = true
+axum-login.workspace = true
+dotenvy.workspace = true
+gurthang-http = { path = "../gurthang-http" }
+gurthang-inertia = { path = "../gurthang-inertia" }
+gurthang-jobs = { path = "../gurthang-jobs" }
+serde.workspace = true
+serde_yaml.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio = { workspace = true, features = [
+    "macros",
+    "rt-multi-thread",
+    "signal",
+    "net",
+    "time",
+    "sync",
+] }
+tower-http.workspace = true
+tower-sessions.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

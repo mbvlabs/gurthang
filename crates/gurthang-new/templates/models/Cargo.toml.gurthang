@@ -1,19 +1,13 @@
 [package]
 name = "{{ crate_name }}_models"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-argon2 = "0.5"
-chrono = { version = "0.4", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-sqlx = { version = "0.8", default-features = false, features = [
-    "runtime-tokio-rustls",
-    "macros",
-    "postgres",
-    "uuid",
-    "chrono",
-] }
-thiserror = "2"
-tokio = { version = "1", default-features = false, features = ["rt"] }
-uuid = { version = "1", features = ["v4", "v7", "serde"] }
+argon2.workspace = true
+chrono.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true

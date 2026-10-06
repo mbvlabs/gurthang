@@ -36,9 +36,10 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(!cargo.contains(&format!("path = \"{}/crates", source.display())));
     assert!(cargo.contains("name = \"sample-app\""));
     assert!(cargo.contains("name = \"sample_app\""));
-    assert!(cargo.contains("gurthang-inertia"));
-    assert!(cargo.contains("gurthang-jobs"));
-    assert!(cargo.contains("gurthang-http"));
+    assert!(cargo.contains("gurthang = { path ="));
+    assert!(!cargo.contains("gurthang-inertia"));
+    assert!(!cargo.contains("gurthang-jobs"));
+    assert!(!cargo.contains("gurthang-http"));
     assert!(!cargo.contains("tower-sessions-sqlx-store"));
     assert!(cargo.contains("[workspace]"));
     assert!(cargo.contains("default-run = \"sample-app\""));
@@ -46,10 +47,13 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(!cargo.contains("tera"));
     assert!(!cargo.contains("datastar"));
     assert!(!cargo.contains("src/domain"));
+    assert!(!cargo.contains("loco_rs"));
+    assert!(!cargo.contains("sea-orm"));
 
     let models_cargo = fs::read_to_string(destination.join("models/Cargo.toml")).unwrap();
     assert!(models_cargo.contains("name = \"sample_app_models\""));
-    assert!(models_cargo.contains("macros"));
+    assert!(models_cargo.contains("sqlx.workspace = true"));
+    assert!(cargo.contains("macros"));
 
     let package = fs::read_to_string(destination.join("package.json")).unwrap();
     assert!(package.contains("\"name\": \"sample-app\""));
@@ -73,6 +77,9 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "gurthang.toml",
         ".env.example",
         ".cargo/config.toml",
+        "config/development.yaml",
+        "config/test.yaml",
+        "config/production.yaml",
         "models/.sqlx/.gitkeep",
         "models/src/user.rs",
         "models/src/sessions.rs",
@@ -81,12 +88,21 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "migrations/0002_create_sessions.sql",
         "migrations/0003_create_background_jobs.sql",
         "src/models.rs",
+        "src/app.rs",
         "src/bin/seed.rs",
         "src/bin/export_payloads.rs",
         "src/controllers/auth.rs",
         "src/controllers/dashboard.rs",
         "src/controllers/welcome.rs",
-        "src/jobs/mod.rs",
+        "src/workers/mod.rs",
+        "src/workers/purge_expired_sessions.rs",
+        "src/tasks/mod.rs",
+        "src/mailers/mod.rs",
+        "src/mailers/auth.rs",
+        "src/initializers/mod.rs",
+        "src/initializers/view_engine.rs",
+        "src/initializers/assets.rs",
+        "src/initializers/auth.rs",
         "src/services/auth.rs",
         "src/routes/mod.rs",
         "src/routes/generated.rs",
@@ -94,7 +110,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "src/routes/auth.rs",
         "src/routes/dashboard.rs",
         "src/controllers/shared.rs",
-        "src/web/assets.rs",
+        "src/assets.rs",
         "css/base.css",
         "assets/.gitkeep",
         "resources/js/Pages/Welcome.tsx",
@@ -109,10 +125,15 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
 
     for forbidden in [
         "tests/auth.rs",
+        "tests/requests",
         "src/models/user.rs",
         "templates/pages/home.html",
         "src/web/datastar.rs",
         "src/web/tera.rs",
+        "src/web/assets.rs",
+        "src/web/mod.rs",
+        "src/jobs/mod.rs",
+        "src/config.rs",
         "src/controllers/pages.rs",
         "src/views/mod.rs",
         "src/views/inertia/welcome.rs",
@@ -120,6 +141,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "bin/install-tailwindcli",
         "src/domain/mod.rs",
         "crates/gurthang-inertia/Cargo.toml",
+        "controllers/web.rs",
+        "jobs/lib.rs",
     ] {
         assert!(
             !destination.join(forbidden).exists(),
@@ -132,6 +155,14 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
 
     let env = fs::read_to_string(destination.join(".env.example")).unwrap();
     assert!(env.contains("SQLX_OFFLINE=true"));
+    assert!(env.contains("DATABASE_URL="));
+    assert!(!env.contains("APP_HOST="));
+
+    let development = fs::read_to_string(destination.join("config/development.yaml")).unwrap();
+    assert!(development.contains("host: 127.0.0.1"));
+    assert!(development.contains("port: 3000"));
+    assert!(development.contains("ssr_runtime:"));
+    assert!(development.contains("concurrency:"));
 
     let user = fs::read_to_string(destination.join("models/src/user.rs")).unwrap();
     assert!(user.contains("sqlx::query_as!"));
@@ -143,40 +174,67 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let controllers = fs::read_to_string(destination.join("src/controllers/dashboard.rs")).unwrap();
     assert!(!controllers.contains("sqlx::query"));
     assert!(controllers.contains("pub struct Dashboard"));
+    assert!(controllers.contains("pub fn routes(ctx: &Context)"));
     assert!(controllers.contains("render_ssr("));
     assert!(!controllers.contains("AppState"));
+    assert!(!controllers.contains("AppContext"));
 
     let auth = fs::read_to_string(destination.join("src/services/auth.rs")).unwrap();
     assert!(auth.contains("impl axum_login::AuthUser for AuthUser"));
 
-    let jobs = fs::read_to_string(destination.join("src/jobs/mod.rs")).unwrap();
-    assert!(!jobs.contains("sqlx::query!"));
-    assert!(jobs.contains("purge_expired"));
-    assert!(jobs.contains("impl PerformJob for Job"));
+    let workers = fs::read_to_string(destination.join("src/workers/mod.rs")).unwrap();
+    assert!(!workers.contains("sqlx::query!"));
+    assert!(workers.contains("purge_expired"));
+    assert!(workers.contains("impl PerformJob for Job"));
+
+    let purge = fs::read_to_string(
+        destination.join("src/workers/purge_expired_sessions.rs"),
+    )
+    .unwrap();
+    assert!(purge.contains("Deserialize"));
+    assert!(purge.contains("Serialize"));
+
+    let export_payloads =
+        fs::read_to_string(destination.join("src/bin/export_payloads.rs")).unwrap();
+    assert!(export_payloads.contains("use gurthang::Hooks"));
 
     let sessions = fs::read_to_string(destination.join("models/src/sessions.rs")).unwrap();
     assert!(sessions.contains("sqlx::query!"));
 
     let welcome = fs::read_to_string(destination.join("src/controllers/welcome.rs")).unwrap();
     assert!(welcome.contains("pub struct Welcome"));
+    assert!(welcome.contains("pub fn routes(ctx: &Context)"));
     assert!(welcome.contains(".render("));
     assert!(welcome.contains("\"Welcome\""));
     assert!(!welcome.contains("impl InertiaPage"));
     assert!(!welcome.contains("views::inertia"));
 
     let lib = fs::read_to_string(destination.join("src/lib.rs")).unwrap();
-    assert!(lib.contains("gurthang_http::mount!"));
-    assert!(lib.contains("get(app.welcome, Welcome::show)"));
-    assert!(lib.contains("pub fn export_payloads("));
-    assert!(lib.contains("pub struct App"));
+    assert!(lib.contains("pub mod app;"));
+    assert!(lib.contains("pub mod workers;"));
+    assert!(!lib.contains("gurthang_http::mount!"));
+    assert!(!lib.contains("pub struct App {"));
+    assert!(!lib.contains("pub fn export_payloads("));
+
+    let app = fs::read_to_string(destination.join("src/app.rs")).unwrap();
+    assert!(app.contains("pub struct App;"));
+    assert!(app.contains("impl Hooks for App"));
+    assert!(app.contains(".add_route(controllers::welcome::routes(ctx))"));
+    assert!(app.contains("fn export_payloads()"));
+    assert!(!app.contains("gurthang:routes:end"));
+    assert!(!app.contains("AppContext"));
+
+    let main = fs::read_to_string(destination.join("src/main.rs")).unwrap();
+    assert!(main.contains("gurthang::start::<sample_app::App>"));
 
     let routes_mod = fs::read_to_string(destination.join("src/routes/mod.rs")).unwrap();
-    assert!(routes_mod.contains("mod generated"));
+    assert!(routes_mod.contains("generated.rs"));
     assert!(!routes_mod.contains("gurthang:generated"));
     assert!(!routes_mod.contains("fn router"));
 
     let welcome_route = fs::read_to_string(destination.join("src/routes/welcome.rs")).unwrap();
     assert!(welcome_route.contains("pub const WELCOME"));
+    assert!(welcome_route.contains("use gurthang::Route"));
     assert!(!welcome_route.contains("fn mount"));
     assert!(!welcome_route.contains("AppState"));
 }

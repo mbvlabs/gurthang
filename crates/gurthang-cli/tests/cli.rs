@@ -13,6 +13,8 @@ fn help_and_version_are_available() {
                 .and(predicate::str::contains("run"))
                 .and(predicate::str::contains("generate"))
                 .and(predicate::str::contains("sync"))
+                .and(predicate::str::contains("routes"))
+                .and(predicate::str::contains("task"))
                 .and(predicate::str::contains("db"))
                 .and(predicate::str::contains("build")),
         );

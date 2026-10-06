@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::models::user::{CreateUserData, User, UserError, normalize_email, validate};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AuthUser(pub User);
 
 impl axum_login::AuthUser for AuthUser {

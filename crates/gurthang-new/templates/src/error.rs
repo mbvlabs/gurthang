@@ -14,9 +14,9 @@ pub enum AppError {
     #[error("response serialization failed")]
     Serialization(#[from] serde_json::Error),
     #[error("background job operation failed")]
-    Jobs(#[from] gurthang_jobs::Error),
+    Jobs(#[from] gurthang::jobs::Error),
     #[error("inertia rendering failed")]
-    Inertia(#[from] gurthang_inertia::Error),
+    Inertia(#[from] gurthang::inertia::Error),
     #[error("asset configuration error: {0}")]
     Asset(String),
     #[error("session operation failed: {0}")]

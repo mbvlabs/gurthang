@@ -1,8 +1,4 @@
-use axum::{
-    http::{HeaderMap, Method, Uri},
-    response::Response,
-};
-use gurthang_inertia::{InertiaRenderer, InertiaRequest, mutation_redirect};
+use gurthang::prelude::*;
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -22,6 +18,15 @@ pub struct DashboardProps {
     pub title: String,
     pub status: String,
     pub user: SafeUser,
+}
+
+pub fn routes(ctx: &Context) -> Router<Context> {
+    let dashboard = Dashboard {
+        inertia: ctx.inertia.clone(),
+    };
+    mount!(dashboard, {
+        crate::routes::dashboard::DASHBOARD => get(dashboard, Dashboard::show),
+    })
 }
 
 impl Dashboard {

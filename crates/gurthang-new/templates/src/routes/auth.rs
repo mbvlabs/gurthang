@@ -1,4 +1,4 @@
-use gurthang_http::Route;
+use gurthang::Route;
 
 pub const REGISTER: Route = Route {
     name: "register",

@@ -50,13 +50,13 @@ pub fn generate(name: &str, options: ControllerOptions, out: &mut impl Write) ->
     if options.dry_run {
         writeln!(out, "Would write src/controllers/mod.rs")?;
         writeln!(out, "Would write src/routes/generated.rs")?;
-        writeln!(out, "Would update src/lib.rs")?;
+        writeln!(out, "Would update src/app.rs")?;
     } else {
         registration::rewrite(&root, false)?;
         wiring::apply(&root, &resource, &actions)?;
         writeln!(out, "Wrote src/controllers/mod.rs")?;
         writeln!(out, "Wrote src/routes/generated.rs")?;
-        writeln!(out, "Updated src/lib.rs")?;
+        writeln!(out, "Updated src/app.rs")?;
         writeln!(out, "Next: gurthang sync routes && gurthang sync payloads")?;
     }
     Ok(())

@@ -60,7 +60,7 @@ impl SharedProps {
             .map_err(|error| AppError::Session(error.to_string()))?;
         Ok(Self {
             auth: AuthProps {
-                user: auth.user.as_ref().map(SafeUser::from),
+                user: auth.user.as_ref().map(|user| SafeUser::from(&user.0)),
             },
             errors,
             flash: FlashProps { success },

@@ -1,4 +1,4 @@
-use gurthang_http::Route;
+use gurthang::Route;
 
 pub const DASHBOARD: Route = Route {
     name: "dashboard",

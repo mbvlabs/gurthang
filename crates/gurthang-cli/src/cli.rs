@@ -24,6 +24,13 @@ pub enum Command {
     Generate(GenerateArgs),
     /// Refresh generated regions and frontend contracts.
     Sync(SyncArgs),
+    /// Print named routes and HTTP verbs.
+    Routes,
+    /// List or run tasks registered by the application.
+    Task {
+        /// Task name. Omit to list registered tasks.
+        name: Option<String>,
+    },
     /// Create, migrate, and seed the application database.
     Db(DbArgs),
     /// Build frontend assets and a release binary.

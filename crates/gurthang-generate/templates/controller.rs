@@ -1,12 +1,5 @@
-use axum::{
-    extract::Path,
-    http::{HeaderMap, Method, Uri},
-    response::Response,
-    Json,
-};
-use gurthang_inertia::{InertiaRenderer, InertiaRequest, mutation_redirect};
+use gurthang::prelude::*;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use ts_rs::TS;
 
 use crate::{
@@ -87,6 +80,18 @@ pub struct {{ page.name }} {
 {%- endif %}
 }
 {% endfor %}
+pub fn routes(ctx: &Context) -> Router<Context> {
+    let controller = {{ struct_name }} {
+        database: ctx.db.clone(),
+        inertia: ctx.inertia.clone(),
+    };
+    mount!(controller, {
+{%- for route in mount_routes %}
+        {{ plural }}::{{ route.ident }} => {{ route.verb }}(controller, {{ struct_name }}::{{ route.handler }}),
+{%- endfor %}
+    })
+}
+
 impl {{ struct_name }} {
 {%- for action in actions %}
 {%- if action == "index" %}

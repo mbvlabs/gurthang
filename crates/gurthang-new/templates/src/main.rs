@@ -2,6 +2,6 @@
 compile_error!("Gurthang applications support Linux only");
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    {{ crate_name }}::run().await
+async fn main() -> gurthang::Result<()> {
+    gurthang::start::<{{ crate_name }}::App>().await
 }

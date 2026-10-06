@@ -23,7 +23,7 @@ struct FactoryField {
 struct RouteConst {
     ident: String,
     name: String,
-    method: String,
+    verb: String,
     path: String,
     handler: String,
 }
@@ -50,10 +50,7 @@ pub(crate) struct ControllerModule {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ControllerWiring {
-    pub module: String,
-    pub field: String,
-    pub struct_name: String,
-    pub mount_lines: Vec<String>,
+    pub add_route: String,
     pub export_types: Vec<String>,
 }
 
@@ -98,6 +95,7 @@ struct ControllerTemplate {
     item_fields: Vec<NamedType>,
     pages: Vec<ViewPage>,
     has_item_props: bool,
+    mount_routes: Vec<RouteConst>,
     index_ident: String,
     show_ident: String,
     index_component: String,
@@ -256,6 +254,10 @@ pub(crate) fn controller(
         item_fields,
         pages,
         has_item_props,
+        mount_routes: actions
+            .iter()
+            .filter_map(|action| route_const(resource, action))
+            .collect(),
         index_ident: route_ident(resource, "index"),
         show_ident: route_ident(resource, "show"),
         index_component: page_component(resource, "index"),
@@ -266,21 +268,6 @@ pub(crate) fn controller(
 }
 
 pub(crate) fn controller_wiring(resource: &Resource, actions: &[String]) -> ControllerWiring {
-    let mount_lines = actions
-        .iter()
-        .filter_map(|action| {
-            let route = route_const(resource, action)?;
-            Some(format!(
-                "        routes::{}::{} => {}(app.{}, {}::{}),",
-                resource.plural_snake,
-                route.ident,
-                route.method.to_lowercase(),
-                resource.plural_snake,
-                resource.plural_pascal,
-                route.handler
-            ))
-        })
-        .collect();
     let mut export_types = Vec::new();
     if actions
         .iter()
@@ -300,10 +287,10 @@ pub(crate) fn controller_wiring(resource: &Resource, actions: &[String]) -> Cont
         }
     }
     ControllerWiring {
-        module: resource.plural_snake.clone(),
-        field: resource.plural_snake.clone(),
-        struct_name: resource.plural_pascal.clone(),
-        mount_lines,
+        add_route: format!(
+            ".add_route(controllers::{}::routes(ctx))",
+            resource.plural_snake
+        ),
         export_types,
     }
 }
@@ -442,7 +429,7 @@ fn route_const(resource: &Resource, action: &str) -> Option<RouteConst> {
     Some(RouteConst {
         ident: route_ident(resource, action),
         name,
-        method: method.to_owned(),
+        verb: method.to_lowercase(),
         path,
         handler: action.to_owned(),
     })
@@ -536,13 +523,18 @@ mod tests {
         assert!(controller_src.contains(".render("));
         assert!(controller_src.contains("\"Widgets/Index\""));
         assert!(!controller_src.contains("impl InertiaPage"));
-        assert!(!controller_src.contains("pub fn register("));
+        assert!(controller_src.contains("pub fn routes(ctx: &Context)"));
+        assert!(controller_src.contains("mount!("));
         assert!(!controller_src.contains("AppState"));
         assert!(!controller_src.contains("views::inertia"));
+        let rust_routes = routes(&resource, &actions).unwrap();
+        assert!(rust_routes.contains("path: \"/widgets/{id}\""));
+        assert!(rust_routes.contains("name: \"widgets.show\""));
         let wiring = controller_wiring(&resource, &actions);
-        assert!(wiring.mount_lines.iter().any(|line| {
-            line.contains("routes::widgets::WIDGETS_INDEX => get(app.widgets, Widgets::index)")
-        }));
+        assert_eq!(
+            wiring.add_route,
+            ".add_route(controllers::widgets::routes(ctx))"
+        );
         assert!(page_src.contains("export default function Index"));
         assert!(routes_src.contains("widgets.index"));
         assert!(routes_src.contains("{${key}}"));

@@ -1,8 +1,4 @@
-use axum::{
-    http::{HeaderMap, Method, Uri},
-    response::Response,
-};
-use gurthang_inertia::{InertiaRenderer, InertiaRequest};
+use gurthang::prelude::*;
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -21,6 +17,15 @@ pub struct Welcome {
 pub struct WelcomeProps {
     pub title: String,
     pub status: String,
+}
+
+pub fn routes(ctx: &Context) -> Router<Context> {
+    let welcome = Welcome {
+        inertia: ctx.inertia.clone(),
+    };
+    mount!(welcome, {
+        crate::routes::welcome::WELCOME => get(welcome, Welcome::show),
+    })
 }
 
 impl Welcome {

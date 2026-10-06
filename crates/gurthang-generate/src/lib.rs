@@ -129,6 +129,10 @@ pub fn sync_routes(check: bool, out: &mut impl Write) -> Result<()> {
     sync_routes::sync(check, out)
 }
 
+pub fn print_routes(out: &mut impl Write) -> Result<()> {
+    sync_routes::print(out)
+}
+
 pub fn sync_payloads(check: bool, out: &mut impl Write) -> Result<()> {
     prepare::run(check, out)?;
     sync_payloads::sync(check, out)

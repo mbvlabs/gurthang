@@ -12,11 +12,19 @@ use error::{Error, Result};
 pub fn run(cli: Cli, out: &mut impl Write) -> Result<()> {
     match cli.command {
         Command::New(args) => {
-            gurthang_new::execute(&args.name, args.path, args.dry_run, &source_root()?, out)?
+            gurthang_new::execute(
+                &args.name,
+                args.path,
+                args.dry_run,
+                &source_root()?,
+                out,
+            )?
         }
         Command::Run => gurthang_run::execute(out)?,
         Command::Generate(args) => generate(args.command, out)?,
         Command::Sync(args) => sync(args.command, out)?,
+        Command::Routes => gurthang_generate::print_routes(out)?,
+        Command::Task { name } => task(name.as_deref(), out)?,
         Command::Db(args) => db(args.command, out)?,
         Command::Build => gurthang_build::execute(out)?,
         Command::Tools(args) => match args.command {
@@ -120,6 +128,35 @@ fn db(command: DbCommand, out: &mut impl Write) -> Result<()> {
     Ok(())
 }
 
+fn task(name: Option<&str>, out: &mut impl Write) -> Result<()> {
+    let current = std::env::current_dir().map_err(|error| {
+        Error::Message(format!("could not determine current directory: {error}"))
+    })?;
+    let root = gurthang_project::find_root_from(&current)?;
+    let bin = gurthang_project::GurthangToml::load(&root)?.project.name;
+    let mut command = std::process::Command::new("cargo");
+    command
+        .arg("run")
+        .arg("--bin")
+        .arg(&bin)
+        .arg("--")
+        .arg("task")
+        .current_dir(&root);
+    if let Some(name) = name {
+        command.arg(name);
+    } else {
+        command.arg("--list");
+    }
+    let status = command
+        .status()
+        .map_err(|error| Error::Message(format!("could not run cargo: {error}")))?;
+    if !status.success() {
+        return Err(Error::Message(format!("task exited with {status}")));
+    }
+    let _ = out;
+    Ok(())
+}
+
 fn source_root() -> Result<PathBuf> {
     if let Some(root) = std::env::var_os("GURTHANG_ROOT") {
         let root = PathBuf::from(root);
@@ -143,7 +180,13 @@ fn source_root() -> Result<PathBuf> {
 }
 
 fn is_checkout(root: &Path) -> bool {
-    root.join("crates/gurthang-http/Cargo.toml").is_file()
+    root.join("crates/gurthang/Cargo.toml").is_file()
+}
+
+impl From<gurthang_project::Error> for Error {
+    fn from(error: gurthang_project::Error) -> Self {
+        Self::Message(error.to_string())
+    }
 }
 
 impl From<gurthang_new::Error> for Error {

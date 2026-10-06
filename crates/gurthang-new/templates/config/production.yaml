@@ -1,0 +1,17 @@
+server:
+  host: 0.0.0.0
+  port: 3000
+  url: http://127.0.0.1:3000
+session:
+  secure: true
+  cookie: gurthang.sid
+inertia:
+  ssr_runtime: node
+  ssr_timeout_ms: 5000
+workers:
+  concurrency: 8
+  poll_interval_ms: 1000
+  lease_seconds: 300
+  timeout_seconds: 240
+logger:
+  level: info

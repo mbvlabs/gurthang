@@ -29,7 +29,7 @@ pub fn execute(
             out,
             "Would create {} at {}",
             name.project_name(),
-            destination.display()
+            destination.display(),
         )?;
         for path in renderer::manifest() {
             writeln!(out, "  {path}")?;
@@ -79,7 +79,7 @@ pub fn execute(
         out,
         "Created {} at {}",
         name.project_name(),
-        destination.display()
+        destination.display(),
     )?;
     writeln!(out)?;
     writeln!(out, "Next:")?;
@@ -213,7 +213,7 @@ mod tests {
         let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
         let main = fs::read_to_string(destination.join("src/main.rs")).unwrap();
         assert!(cargo.contains("name = \"my-app\""));
-        assert!(main.contains("my_app::run"));
+        assert!(main.contains("gurthang::start::<my_app::App>"));
         assert!(!cargo.contains("__GURTHANG_"));
         assert!(destination.join(".gitignore").is_file());
         assert!(destination.join("gurthang.toml").is_file());
@@ -239,7 +239,10 @@ mod tests {
         let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
         let source = source.canonicalize().unwrap();
         assert!(!cargo.contains(&format!("path = \"{}/crates", source.display())));
-        assert!(cargo.contains("gurthang-http = { path = \"../"));
+        assert!(cargo.contains("gurthang = { path = \"../"));
+        assert!(!cargo.contains("gurthang-http"));
+        assert!(!cargo.contains("gurthang-inertia"));
+        assert!(!cargo.contains("gurthang-jobs"));
     }
 
     #[test]

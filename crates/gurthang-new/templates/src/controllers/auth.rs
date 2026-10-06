@@ -6,8 +6,7 @@ use axum::{
     http::{HeaderMap, Method, Uri, header},
     response::Response,
 };
-use gurthang_http::Route;
-use gurthang_inertia::{InertiaRenderer, InertiaRequest, mutation_redirect};
+use gurthang::prelude::*;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -45,6 +44,19 @@ pub struct LoginProps {
 #[ts(export, export_to = "../resources/js/generated/")]
 pub struct RegisterProps {
     pub email: Option<String>,
+}
+
+pub fn routes(ctx: &Context) -> Router<Context> {
+    let auth = Auth {
+        inertia: ctx.inertia.clone(),
+    };
+    mount!(auth, {
+        crate::routes::auth::REGISTER => get(auth, Auth::new_register),
+        crate::routes::auth::REGISTER_CREATE => post(auth, Auth::register_user),
+        crate::routes::auth::LOGIN => get(auth, Auth::new_login),
+        crate::routes::auth::LOGIN_CREATE => post(auth, Auth::login),
+        crate::routes::auth::LOGOUT => delete(auth, Auth::logout),
+    })
 }
 
 impl Auth {

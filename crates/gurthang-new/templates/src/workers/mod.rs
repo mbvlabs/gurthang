@@ -1,8 +1,8 @@
-use gurthang_jobs::{PerformJob, Result};
+pub mod purge_expired_sessions;
+
+use gurthang::jobs::{PerformJob, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-
-pub use gurthang_jobs::{JobQueue, JobWorker, WorkerConfig};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
@@ -25,8 +25,9 @@ impl PerformJob for Job {
         match self {
             // gurthang:generated:handlers:start
             Self::PurgeExpiredSessions => {
-                crate::models::sessions::purge_expired(database).await?;
-                Ok(())
+                purge_expired_sessions::PurgeExpiredSessions
+                    .perform(database)
+                    .await
             }
             // gurthang:generated:handlers:end
         }
