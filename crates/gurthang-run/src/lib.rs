@@ -20,7 +20,10 @@ enum DevelopmentEvent {
 
 #[derive(Debug)]
 pub enum Error {
-    Io { context: String, source: std::io::Error },
+    Io {
+        context: String,
+        source: std::io::Error,
+    },
     Development(String),
 }
 

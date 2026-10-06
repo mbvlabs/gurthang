@@ -73,6 +73,24 @@ fn missing_source_root_fails_with_guidance() {
 }
 
 #[test]
+fn new_without_gurthang_root_still_scaffolds() {
+    let temp = tempfile::tempdir().unwrap();
+    let destination = temp.path().join("destination");
+    Command::cargo_bin("gurthang")
+        .unwrap()
+        .env_remove("GURTHANG_ROOT")
+        .args(["new", "my-app", "--path"])
+        .arg(&destination)
+        .assert()
+        .success();
+    let cargo = std::fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+    assert!(
+        cargo.contains("gurthang = { path =") || cargo.contains("gurthang = { git ="),
+        "generated Cargo.toml should depend on gurthang:\n{cargo}"
+    );
+}
+
+#[test]
 fn tools_help_lists_check_and_sync() {
     Command::cargo_bin("gurthang")
         .unwrap()

@@ -13,15 +13,40 @@ use std::{
 use gurthang_project::ProjectName;
 use tempfile::Builder;
 
+/// Where generated apps should take the `gurthang` crate from.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Source {
+    /// A Gurthang checkout on this machine. Used when developing Gurthang.
+    Path(PathBuf),
+    /// Fetch Gurthang from git. Used by installed CLIs that have no checkout.
+    Git { url: String, rev: Option<String> },
+}
+
+impl Source {
+    fn cargo_spec(&self, destination: &Path) -> String {
+        match self {
+            Self::Path(root) => {
+                let root = source_reference(destination, root);
+                format!("{{ path = \"{root}/crates/gurthang\" }}")
+            }
+            Self::Git { url, rev } => match rev.as_deref().filter(|rev| !rev.is_empty()) {
+                Some(rev) => format!("{{ git = \"{url}\", rev = \"{rev}\" }}"),
+                None => format!("{{ git = \"{url}\", tag = \"development\" }}"),
+            },
+        }
+    }
+}
+
 pub fn execute(
     name: &str,
     path: Option<PathBuf>,
     dry_run: bool,
-    source_root: &Path,
+    source: &Source,
     out: &mut impl Write,
 ) -> Result<()> {
     let name = ProjectName::parse(name)?;
-    let destination = absolute_destination(path.unwrap_or_else(|| PathBuf::from(name.project_name())))?;
+    let destination =
+        absolute_destination(path.unwrap_or_else(|| PathBuf::from(name.project_name())))?;
 
     validate_destination(&destination)?;
     if dry_run {
@@ -47,7 +72,7 @@ pub fn execute(
         .prefix(".gurthang-")
         .tempdir_in(parent)
         .map_err(|error| Error::io("could not create temporary project directory", error))?;
-    let source = source_reference(&destination, source_root);
+    let source = source.cargo_spec(&destination);
     renderer::render(temporary.path(), &name, &source)?;
 
     let destination_was_empty = destination.is_dir();
@@ -200,7 +225,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let destination = temp.path().join("output");
         let mut output = Vec::new();
-        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let source = Source::Path(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
         execute(
             "my-app",
             Some(destination.clone()),
@@ -226,7 +251,7 @@ mod tests {
     fn dependency_paths_are_relative_to_the_project() {
         let temp = tempfile::tempdir().unwrap();
         let destination = temp.path().join("output");
-        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let source = Source::Path(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
         execute(
             "my-app",
             Some(destination.clone()),
@@ -237,8 +262,11 @@ mod tests {
         .unwrap();
 
         let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
-        let source = source.canonicalize().unwrap();
-        assert!(!cargo.contains(&format!("path = \"{}/crates", source.display())));
+        let Source::Path(root) = &source else {
+            panic!("expected a path source");
+        };
+        let root = root.canonicalize().unwrap();
+        assert!(!cargo.contains(&format!("path = \"{}/crates", root.display())));
         assert!(cargo.contains("gurthang = { path = \"../"));
         assert!(!cargo.contains("gurthang-http"));
         assert!(!cargo.contains("gurthang-inertia"));
@@ -246,11 +274,58 @@ mod tests {
     }
 
     #[test]
+    fn git_source_writes_a_git_dependency() {
+        let temp = tempfile::tempdir().unwrap();
+        let destination = temp.path().join("output");
+        let source = Source::Git {
+            url: "https://github.com/mbvlabs/gurthang".into(),
+            rev: Some("abc123def".into()),
+        };
+        execute(
+            "my-app",
+            Some(destination.clone()),
+            false,
+            &source,
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+        assert!(cargo.contains(
+            "gurthang = { git = \"https://github.com/mbvlabs/gurthang\", rev = \"abc123def\" }"
+        ));
+        assert!(!cargo.contains("/crates/gurthang"));
+    }
+
+    #[test]
+    fn git_source_without_rev_uses_the_development_tag() {
+        let temp = tempfile::tempdir().unwrap();
+        let destination = temp.path().join("output");
+        let source = Source::Git {
+            url: "https://github.com/mbvlabs/gurthang".into(),
+            rev: None,
+        };
+        execute(
+            "my-app",
+            Some(destination.clone()),
+            false,
+            &source,
+            &mut Vec::new(),
+        )
+        .unwrap();
+
+        let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
+        assert!(cargo.contains(
+            "gurthang = { git = \"https://github.com/mbvlabs/gurthang\", tag = \"development\" }"
+        ));
+    }
+
+    #[test]
     fn dry_run_writes_nothing_and_prints_sorted_manifest() {
         let temp = tempfile::tempdir().unwrap();
         let destination = temp.path().join("output");
         let mut output = Vec::new();
-        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let source = Source::Path(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
         execute(
             "demo",
             Some(destination.clone()),

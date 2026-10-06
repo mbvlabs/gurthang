@@ -31,7 +31,11 @@ impl fmt::Display for Error {
                 "not inside a Gurthang application (gurthang.toml and Cargo.toml not found)"
             ),
             Self::MissingToml(path) => {
-                write!(formatter, "could not read {}: file is missing", path.display())
+                write!(
+                    formatter,
+                    "could not read {}: file is missing",
+                    path.display()
+                )
             }
             Self::Toml(message) => write!(formatter, "invalid gurthang.toml: {message}"),
             Self::Io { context, source } => write!(formatter, "{context}: {source}"),

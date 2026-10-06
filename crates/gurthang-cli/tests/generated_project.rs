@@ -6,7 +6,7 @@ use gurthang_new::{self, manifest};
 fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let temp = tempfile::tempdir().unwrap();
     let destination = temp.path().join("generated");
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let source = gurthang_new::Source::Path(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
     gurthang_new::execute(
         "sample-app",
         Some(destination.clone()),
@@ -32,8 +32,11 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     }
 
     let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
-    let source = source.canonicalize().unwrap();
-    assert!(!cargo.contains(&format!("path = \"{}/crates", source.display())));
+    let gurthang_new::Source::Path(root) = &source else {
+        panic!("expected a path source");
+    };
+    let root = root.canonicalize().unwrap();
+    assert!(!cargo.contains(&format!("path = \"{}/crates", root.display())));
     assert!(cargo.contains("name = \"sample-app\""));
     assert!(cargo.contains("name = \"sample_app\""));
     assert!(cargo.contains("gurthang = { path ="));
@@ -187,10 +190,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(workers.contains("purge_expired"));
     assert!(workers.contains("impl PerformJob for Job"));
 
-    let purge = fs::read_to_string(
-        destination.join("src/workers/purge_expired_sessions.rs"),
-    )
-    .unwrap();
+    let purge =
+        fs::read_to_string(destination.join("src/workers/purge_expired_sessions.rs")).unwrap();
     assert!(purge.contains("Deserialize"));
     assert!(purge.contains("Serialize"));
 

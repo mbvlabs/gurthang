@@ -2,7 +2,10 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 
-use crate::{app::Context, error::{Error, Result}};
+use crate::{
+    app::Context,
+    error::{Error, Result},
+};
 
 pub struct TaskInfo {
     pub name: String,
@@ -52,9 +55,16 @@ impl Tasks {
             .collect()
     }
 
-    pub async fn run(&self, name: &str, ctx: &Context, vars: &BTreeMap<String, String>) -> Result<()> {
+    pub async fn run(
+        &self,
+        name: &str,
+        ctx: &Context,
+        vars: &BTreeMap<String, String>,
+    ) -> Result<()> {
         let task = self.tasks.get(name).ok_or_else(|| {
-            Error::Message(format!("unknown task {name:?}; run with no name to list tasks"))
+            Error::Message(format!(
+                "unknown task {name:?}; run with no name to list tasks"
+            ))
         })?;
         task.run(ctx, vars).await
     }

@@ -114,7 +114,11 @@ pub fn print(out: &mut impl Write) -> Result<(), Error> {
         writeln!(out, "No mounted routes.")?;
         return Ok(());
     }
-    let name_width = routes.iter().map(|route| route.name.len()).max().unwrap_or(8);
+    let name_width = routes
+        .iter()
+        .map(|route| route.name.len())
+        .max()
+        .unwrap_or(8);
     for route in routes {
         writeln!(
             out,

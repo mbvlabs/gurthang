@@ -138,7 +138,10 @@ fn default_log_level() -> String {
 impl Config {
     pub fn load() -> Result<Self> {
         let environment = Environment::from_env();
-        Self::load_from(Path::new("config").join(format!("{}.yaml", environment.as_str())), environment)
+        Self::load_from(
+            Path::new("config").join(format!("{}.yaml", environment.as_str())),
+            environment,
+        )
     }
 
     pub fn load_from(path: impl AsRef<Path>, environment: Environment) -> Result<Self> {
@@ -167,7 +170,9 @@ impl Config {
         format!("{}:{}", self.server.host, self.server.port)
             .parse()
             .map_err(|_| {
-                Error::Config("server.host and server.port do not form a valid socket address".into())
+                Error::Config(
+                    "server.host and server.port do not form a valid socket address".into(),
+                )
             })
     }
 

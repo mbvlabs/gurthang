@@ -15,10 +15,7 @@ const STORED_ERROR_LIMIT: usize = 2_000;
 
 pub trait PerformJob: DeserializeOwned + Send + Sync + 'static {
     fn name(&self) -> &'static str;
-    fn perform(
-        self,
-        database: &PgPool,
-    ) -> impl std::future::Future<Output = Result<()>> + Send;
+    fn perform(self, database: &PgPool) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
 #[derive(Clone, Debug)]
@@ -37,7 +34,9 @@ impl WorkerConfig {
         job_timeout: Duration,
     ) -> Result<Self> {
         if concurrency == 0 {
-            return Err(Error::Config("worker concurrency must be greater than zero".into()));
+            return Err(Error::Config(
+                "worker concurrency must be greater than zero".into(),
+            ));
         }
         if job_timeout >= lease {
             return Err(Error::Config(

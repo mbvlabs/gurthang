@@ -195,9 +195,9 @@ async fn serve(boot: BootResult) -> Result<()> {
         StartMode::Web | StartMode::All => {
             let addr = boot.context.config.socket_addr()?;
             let listener = TcpListener::bind(addr).await?;
-            let router = boot.router.ok_or_else(|| {
-                Error::Message("web start mode is missing a router".into())
-            })?;
+            let router = boot
+                .router
+                .ok_or_else(|| Error::Message("web start mode is missing a router".into()))?;
             tracing::info!(
                 address = %listener.local_addr()?,
                 environment = %boot.context.environment,
@@ -233,9 +233,7 @@ async fn run_tasks<H: Hooks>(args: Vec<String>) -> Result<()> {
     let config = Config::load()?;
     init_tracing(&config);
     let boot = create_app::<H>(StartMode::Web, config).await?;
-    tasks
-        .run(&name, &boot.context, &Default::default())
-        .await
+    tasks.run(&name, &boot.context, &Default::default()).await
 }
 
 fn init_tracing(config: &Config) {

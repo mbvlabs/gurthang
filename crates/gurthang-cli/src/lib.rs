@@ -12,13 +12,7 @@ use error::{Error, Result};
 pub fn run(cli: Cli, out: &mut impl Write) -> Result<()> {
     match cli.command {
         Command::New(args) => {
-            gurthang_new::execute(
-                &args.name,
-                args.path,
-                args.dry_run,
-                &source_root()?,
-                out,
-            )?
+            gurthang_new::execute(&args.name, args.path, args.dry_run, &source()?, out)?
         }
         Command::Run => gurthang_run::execute(out)?,
         Command::Generate(args) => generate(args.command, out)?,
@@ -157,11 +151,26 @@ fn task(name: Option<&str>, out: &mut impl Write) -> Result<()> {
     Ok(())
 }
 
-fn source_root() -> Result<PathBuf> {
-    if let Some(root) = std::env::var_os("GURTHANG_ROOT") {
-        let root = PathBuf::from(root);
+fn source() -> Result<gurthang_new::Source> {
+    resolve_source(
+        std::env::var_os("GURTHANG_ROOT").map(PathBuf::from),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        cargo_home(),
+        env!("GURTHANG_GIT_URL"),
+        option_env_rev(env!("GURTHANG_GIT_REV")),
+    )
+}
+
+fn resolve_source(
+    gurthang_root: Option<PathBuf>,
+    compiled_root: PathBuf,
+    cargo_home: Option<PathBuf>,
+    git_url: &str,
+    git_rev: Option<&str>,
+) -> Result<gurthang_new::Source> {
+    if let Some(root) = gurthang_root {
         if is_checkout(&root) {
-            return Ok(root);
+            return Ok(gurthang_new::Source::Path(root));
         }
         return Err(Error::Message(format!(
             "GURTHANG_ROOT is not a gurthang checkout: {}",
@@ -169,18 +178,39 @@ fn source_root() -> Result<PathBuf> {
         )));
     }
 
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    if is_checkout(&root) {
-        return Ok(root);
+    if is_developer_checkout(&compiled_root, cargo_home.as_deref()) {
+        return Ok(gurthang_new::Source::Path(compiled_root));
     }
-    Err(Error::Message(format!(
-        "gurthang source not found at {}; set GURTHANG_ROOT to a gurthang checkout",
-        root.display()
-    )))
+
+    Ok(gurthang_new::Source::Git {
+        url: git_url.to_string(),
+        rev: git_rev.map(str::to_string),
+    })
+}
+
+fn is_developer_checkout(root: &Path, cargo_home: Option<&Path>) -> bool {
+    if !is_checkout(root) {
+        return false;
+    }
+    match cargo_home {
+        Some(cargo_home) if root.starts_with(cargo_home) => false,
+        _ => true,
+    }
 }
 
 fn is_checkout(root: &Path) -> bool {
     root.join("crates/gurthang/Cargo.toml").is_file()
+}
+
+fn cargo_home() -> Option<PathBuf> {
+    if let Some(home) = std::env::var_os("CARGO_HOME") {
+        return Some(PathBuf::from(home));
+    }
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo"))
+}
+
+fn option_env_rev(rev: &str) -> Option<&str> {
+    if rev.is_empty() { None } else { Some(rev) }
 }
 
 impl From<gurthang_project::Error> for Error {
@@ -222,5 +252,114 @@ impl From<gurthang_build::Error> for Error {
 impl From<gurthang_tools::Error> for Error {
     fn from(error: gurthang_tools::Error) -> Self {
         Self::Message(error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn fake_checkout(root: &Path) {
+        let crate_dir = root.join("crates/gurthang");
+        fs::create_dir_all(&crate_dir).unwrap();
+        fs::write(
+            crate_dir.join("Cargo.toml"),
+            "[package]\nname = \"gurthang\"\n",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn gurthang_root_uses_the_checkout() {
+        let temp = tempfile::tempdir().unwrap();
+        fake_checkout(temp.path());
+        let source = resolve_source(
+            Some(temp.path().to_path_buf()),
+            PathBuf::from("/missing"),
+            None,
+            "https://example.com/gurthang",
+            Some("abc"),
+        )
+        .unwrap();
+        assert_eq!(
+            source,
+            gurthang_new::Source::Path(temp.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn invalid_gurthang_root_errors() {
+        let temp = tempfile::tempdir().unwrap();
+        let error = resolve_source(
+            Some(temp.path().to_path_buf()),
+            PathBuf::from("/missing"),
+            None,
+            "https://example.com/gurthang",
+            Some("abc"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("GURTHANG_ROOT"));
+    }
+
+    #[test]
+    fn compiled_checkout_is_used_when_present() {
+        let temp = tempfile::tempdir().unwrap();
+        fake_checkout(temp.path());
+        let source = resolve_source(
+            None,
+            temp.path().to_path_buf(),
+            None,
+            "https://example.com/gurthang",
+            Some("abc"),
+        )
+        .unwrap();
+        assert_eq!(
+            source,
+            gurthang_new::Source::Path(temp.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn cargo_install_git_checkout_uses_git() {
+        let cargo_home = tempfile::tempdir().unwrap();
+        let root = cargo_home
+            .path()
+            .join("git/checkouts/gurthang-deadbeef/abc123");
+        fake_checkout(&root);
+        let source = resolve_source(
+            None,
+            root,
+            Some(cargo_home.path().to_path_buf()),
+            "https://example.com/gurthang",
+            Some("abc"),
+        )
+        .unwrap();
+        assert_eq!(
+            source,
+            gurthang_new::Source::Git {
+                url: "https://example.com/gurthang".into(),
+                rev: Some("abc".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn missing_compiled_checkout_uses_git() {
+        let source = resolve_source(
+            None,
+            PathBuf::from("/missing/gurthang"),
+            None,
+            "https://example.com/gurthang",
+            Some("abc"),
+        )
+        .unwrap();
+        assert_eq!(
+            source,
+            gurthang_new::Source::Git {
+                url: "https://example.com/gurthang".into(),
+                rev: Some("abc".into()),
+            }
+        );
     }
 }

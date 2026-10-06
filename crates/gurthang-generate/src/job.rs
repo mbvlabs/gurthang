@@ -30,7 +30,9 @@ pub fn generate(name: &str, options: GenerateOptions, out: &mut impl Write) -> R
     }
     let worker_file = root.join(format!("src/workers/{snake}.rs"));
     if worker_file.exists() {
-        return Err(Error::Message(format!("src/workers/{snake}.rs already exists")));
+        return Err(Error::Message(format!(
+            "src/workers/{snake}.rs already exists"
+        )));
     }
     if options.dry_run {
         writeln!(out, "Would write src/workers/{snake}.rs")?;
@@ -133,7 +135,10 @@ fn append_register(source: &str, call: &str) -> Result<String, Error> {
             .find('\n')
             .map(|offset| last + offset + 1)
             .unwrap_or(source.len());
-        let indent = line_indent(source, source[..last].rfind('\n').map(|i| i + 1).unwrap_or(0));
+        let indent = line_indent(
+            source,
+            source[..last].rfind('\n').map(|i| i + 1).unwrap_or(0),
+        );
         let mut updated = String::new();
         updated.push_str(&source[..line_end]);
         updated.push_str(&indent);

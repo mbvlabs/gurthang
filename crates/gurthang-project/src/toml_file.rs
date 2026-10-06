@@ -32,8 +32,7 @@ impl GurthangToml {
                 Error::io(format!("could not read {}", path.display()), error)
             }
         })?;
-        let parsed: Self =
-            toml::from_str(&text).map_err(|error| Error::Toml(error.to_string()))?;
+        let parsed: Self = toml::from_str(&text).map_err(|error| Error::Toml(error.to_string()))?;
         if parsed.schema_version != 1 {
             return Err(Error::Toml(format!(
                 "unsupported schema_version {}",

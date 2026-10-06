@@ -62,9 +62,7 @@ fn ensure_export(source: &str, ty: &str) -> Result<String, Error> {
     let Some(relative_ok) = rest.find("\n        Ok(())") else {
         return rest
             .find("\n    Ok(())")
-            .map(|relative_ok| {
-                insert_export(source, start + relative_ok + 1, ty)
-            })
+            .map(|relative_ok| insert_export(source, start + relative_ok + 1, ty))
             .ok_or_else(|| Error::Message("could not find export_payloads return".into()));
     };
     Ok(insert_export(source, start + relative_ok + 1, ty))
@@ -73,7 +71,9 @@ fn ensure_export(source: &str, ty: &str) -> Result<String, Error> {
 fn insert_export(source: &str, index: usize, ty: &str) -> String {
     let mut updated = String::new();
     updated.push_str(&source[..index]);
-    updated.push_str(&format!("        {ty}::export().map_err(|error| Error::Message(error.to_string()))?;\n"));
+    updated.push_str(&format!(
+        "        {ty}::export().map_err(|error| Error::Message(error.to_string()))?;\n"
+    ));
     updated.push_str(&source[index..]);
     updated
 }
@@ -140,10 +140,7 @@ impl Hooks for App {
         assert!(updated.contains(".add_route(controllers::widgets::routes(ctx))"));
         assert!(updated.contains("crate::controllers::widgets::WidgetProps::export()"));
         assert!(updated.contains("crate::controllers::widgets::IndexProps::export()"));
-        let routes_fn = updated
-            .split("fn export_payloads")
-            .next()
-            .unwrap();
+        let routes_fn = updated.split("fn export_payloads").next().unwrap();
         let last_add = routes_fn.rfind(".add_route(").unwrap();
         assert!(
             routes_fn[last_add..].contains("controllers::widgets::routes(ctx)"),

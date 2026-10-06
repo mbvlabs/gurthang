@@ -25,7 +25,11 @@ mod tests {
     fn finds_project_root_from_a_nested_directory() {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(directory.path().join("Cargo.toml"), "[package]").unwrap();
-        std::fs::write(directory.path().join("gurthang.toml"), "schema_version = 1\n").unwrap();
+        std::fs::write(
+            directory.path().join("gurthang.toml"),
+            "schema_version = 1\n",
+        )
+        .unwrap();
         let nested = directory.path().join("src/controllers");
         std::fs::create_dir_all(&nested).unwrap();
         assert_eq!(find_root_from(&nested).unwrap(), directory.path());

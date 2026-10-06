@@ -84,7 +84,11 @@ pub trait Initializer: Send + Sync {
         Ok(())
     }
 
-    async fn after_routes(&self, router: Router<Context>, ctx: &Context) -> Result<Router<Context>> {
+    async fn after_routes(
+        &self,
+        router: Router<Context>,
+        ctx: &Context,
+    ) -> Result<Router<Context>> {
         let _ = ctx;
         Ok(router)
     }

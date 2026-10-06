@@ -64,7 +64,9 @@ pub fn execute(out: &mut impl Write) -> Result<()> {
     writeln!(out, "+ SQLX_OFFLINE=true cargo build --release")?;
     let status = prepare.status()?;
     if !status.success() {
-        return Err(Error::Message(format!("cargo build --release failed ({status})")));
+        return Err(Error::Message(format!(
+            "cargo build --release failed ({status})"
+        )));
     }
 
     let binary = release_binary(&root, &toml.project.name);
@@ -81,7 +83,10 @@ fn load_env(root: &Path) {
 
 fn run(root: &Path, program: &str, args: &[&str], out: &mut impl Write) -> Result<()> {
     writeln!(out, "+ {program} {}", args.join(" "))?;
-    let status = Command::new(program).args(args).current_dir(root).status()?;
+    let status = Command::new(program)
+        .args(args)
+        .current_dir(root)
+        .status()?;
     if !status.success() {
         return Err(Error::Message(format!(
             "{program} {} failed ({status})",
