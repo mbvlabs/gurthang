@@ -51,10 +51,7 @@ fn write_model(
     let contents = region::with_custom(&render_model(&resource, &table)?, &custom);
     if options.dry_run && overwrite {
         if path.exists() && fs::read_to_string(&path)? != contents {
-            return Err(Error::Message(format!(
-                "{} is out of date",
-                path.display()
-            )));
+            return Err(Error::Message(format!("{} is out of date", path.display())));
         }
         writeln!(out, "{} is current", path.display())?;
         return Ok(());

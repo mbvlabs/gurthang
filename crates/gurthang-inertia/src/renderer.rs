@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 
 use crate::{
     error::{Error, Result},
-    page::{InertiaPage, InertiaRenderMode, Page},
+    page::{InertiaRenderMode, Page},
     request::InertiaRequest,
     ssr::InertiaSsr,
 };
@@ -45,11 +45,43 @@ impl InertiaRenderer {
     pub async fn render<P, S>(
         &self,
         request: &InertiaRequest,
+        component: &'static str,
         props: P,
         shared: S,
     ) -> Result<Response>
     where
-        P: InertiaPage,
+        P: Serialize,
+        S: Serialize,
+    {
+        self.render_with(request, component, props, shared, InertiaRenderMode::Client)
+            .await
+    }
+
+    pub async fn render_ssr<P, S>(
+        &self,
+        request: &InertiaRequest,
+        component: &'static str,
+        props: P,
+        shared: S,
+    ) -> Result<Response>
+    where
+        P: Serialize,
+        S: Serialize,
+    {
+        self.render_with(request, component, props, shared, InertiaRenderMode::Ssr)
+            .await
+    }
+
+    async fn render_with<P, S>(
+        &self,
+        request: &InertiaRequest,
+        component: &'static str,
+        props: P,
+        shared: S,
+        mode: InertiaRenderMode,
+    ) -> Result<Response>
+    where
+        P: Serialize,
         S: Serialize,
     {
         if request.is_inertia
@@ -64,13 +96,13 @@ impl InertiaRenderer {
 
         let mut values = object(serde_json::to_value(shared)?)?;
         values.extend(object(serde_json::to_value(props)?)?);
-        filter_partial(request, P::COMPONENT, &mut values);
+        filter_partial(request, component, &mut values);
         values
             .entry("errors")
             .or_insert_with(|| Value::Object(Map::new()));
 
         let page = Page {
-            component: P::COMPONENT,
+            component,
             props: Value::Object(values),
             url: request.url.clone(),
             version: self.version.clone(),
@@ -85,7 +117,7 @@ impl InertiaRenderer {
             return Ok(response);
         }
 
-        let ssr = if P::RENDER_MODE == InertiaRenderMode::Ssr {
+        let ssr = if mode == InertiaRenderMode::Ssr {
             self.ssr.render(&page).await
         } else {
             None
@@ -117,10 +149,7 @@ fn document(
     ssr: Option<&crate::ssr::SsrOutput>,
 ) -> String {
     let (ssr_head, body) = match ssr {
-        Some(ssr) => (
-            ssr.head.join("\n"),
-            ssr.body.clone(),
-        ),
+        Some(ssr) => (ssr.head.join("\n"), ssr.body.clone()),
         None => (
             String::new(),
             format!(
@@ -186,10 +215,6 @@ mod tests {
         drop: &'static str,
     }
 
-    impl InertiaPage for TestProps {
-        const COMPONENT: &'static str = "Test";
-    }
-
     #[derive(Serialize)]
     struct EmptyShared {}
 
@@ -213,6 +238,7 @@ mod tests {
         let response = renderer()
             .render(
                 &request(&[("x-inertia", "true"), ("x-inertia-version", "v1")]),
+                "Test",
                 TestProps {
                     keep: "yes",
                     drop: "no",
@@ -240,6 +266,7 @@ mod tests {
                     ("x-inertia-partial-data", "keep,drop"),
                     ("x-inertia-partial-except", "drop"),
                 ]),
+                "Test",
                 TestProps {
                     keep: "yes",
                     drop: "no",
@@ -260,6 +287,7 @@ mod tests {
         let response = renderer()
             .render(
                 &request(&[]),
+                "Test",
                 TestProps {
                     keep: "</script>",
                     drop: "&",
@@ -280,6 +308,7 @@ mod tests {
         let response = renderer()
             .render(
                 &request(&[("x-inertia", "true"), ("x-inertia-version", "old")]),
+                "Test",
                 TestProps {
                     keep: "yes",
                     drop: "no",

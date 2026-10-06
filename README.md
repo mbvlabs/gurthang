@@ -30,10 +30,11 @@ gurthang build
 ```
 
 The generated app is MVC (`models`, `controllers`, `services`, `jobs`) plus an
-Andurel-style `routes/` catalog. Named routes drive the paths controllers
-register. Inertia page props live on the controllers. Stable
-protocol code lives in Gurthang crates (`gurthang-inertia`, `gurthang-jobs`,
-`gurthang-http`). Controllers never own SQL.
+Andurel-style `routes/` catalog. Route constants hold a name and path; HTTP
+methods are declared when `mount!` binds a controller method. Inertia page
+props live on the controllers. Stable protocol code lives in Gurthang crates
+(`gurthang-inertia`, `gurthang-jobs`, `gurthang-http`). Controllers never own
+SQL.
 
 `query!` / `query_as!` live in a separate `models` crate so a controller edit
 does not rebuild database macros. Generate and sync refresh offline SQLx data
@@ -127,9 +128,9 @@ my-app/
     .sqlx/
   src/
     main.rs               # thin
-    lib.rs
-    controllers/          # handlers, Inertia props, route registration
-    routes/               # named route catalog
+    lib.rs                # App, mount!, export_payloads, process modes
+    controllers/          # structs that hold state, handlers, Inertia props
+    routes/               # named route catalog (name + path)
     services/
     jobs/
   resources/js/

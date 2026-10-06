@@ -17,9 +17,7 @@ pub fn sync(check: bool, out: &mut impl Write) -> Result<(), Error> {
         .current_dir(&root)
         .status()?;
     if !status.success() {
-        return Err(Error::Message(format!(
-            "export_payloads failed ({status})"
-        )));
+        return Err(Error::Message(format!("export_payloads failed ({status})")));
     }
     if let Some(before) = snapshot {
         let after = snapshot_dir(&generated)?;

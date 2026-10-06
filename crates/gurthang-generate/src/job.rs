@@ -28,7 +28,12 @@ pub fn generate(name: &str, options: GenerateOptions, out: &mut impl Write) -> R
         writeln!(out, "Would add Job::{pascal}")?;
         return Ok(());
     }
-    let source = region::ensure_line_in_region(&source, VARIANTS_START, VARIANTS_END, &format!("{pascal},"))?;
+    let source = region::ensure_line_in_region(
+        &source,
+        VARIANTS_START,
+        VARIANTS_END,
+        &format!("{pascal},"),
+    )?;
     let source = region::ensure_line_in_region(
         &source,
         NAMES_START,

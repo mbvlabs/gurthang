@@ -3,20 +3,14 @@ pub mod error;
 
 use std::{io::Write, path::PathBuf};
 
-use cli::{
-    Cli, Command, DbCommand, GenerateCommand, MigrateCommand, SyncCommand,
-};
+use cli::{Cli, Command, DbCommand, GenerateCommand, MigrateCommand, SyncCommand};
 use error::{Error, Result};
 
 pub fn run(cli: Cli, out: &mut impl Write) -> Result<()> {
     match cli.command {
-        Command::New(args) => gurthang_new::execute(
-            &args.name,
-            args.path,
-            args.dry_run,
-            &source_root(),
-            out,
-        )?,
+        Command::New(args) => {
+            gurthang_new::execute(&args.name, args.path, args.dry_run, &source_root(), out)?
+        }
         Command::Run => gurthang_run::execute(out)?,
         Command::Generate(args) => generate(args.command, out)?,
         Command::Sync(args) => sync(args.command, out)?,
@@ -64,10 +58,7 @@ fn generate(command: GenerateCommand, out: &mut impl Write) -> Result<()> {
         } => {
             gurthang_generate::generate_scaffold(
                 &name,
-                gurthang_generate::ModelOptions {
-                    table,
-                    dry_run,
-                },
+                gurthang_generate::ModelOptions { table, dry_run },
                 gurthang_generate::ControllerOptions {
                     actions: Vec::new(),
                     dry_run,

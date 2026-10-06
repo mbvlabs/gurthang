@@ -8,7 +8,7 @@ use crate::{
     naming::Resource,
     region, registration,
     schema::{self, Table},
-    tmpl,
+    tmpl, wiring,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -20,10 +20,12 @@ pub struct ControllerOptions {
 impl ControllerOptions {
     pub fn actions(&self) -> Vec<String> {
         if self.actions.is_empty() {
-            ["index", "show", "new", "create", "edit", "update", "destroy"]
-                .into_iter()
-                .map(str::to_owned)
-                .collect()
+            [
+                "index", "show", "new", "create", "edit", "update", "destroy",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
         } else {
             self.actions.clone()
         }
@@ -35,16 +37,26 @@ pub fn generate(name: &str, options: ControllerOptions, out: &mut impl Write) ->
     let resource = Resource::parse(name, None);
     let actions = options.actions();
     let table = load_table_optional(&root, &resource.table);
-    write_controller(&root, &resource, &actions, table.as_ref(), options.dry_run, out)?;
+    write_controller(
+        &root,
+        &resource,
+        &actions,
+        table.as_ref(),
+        options.dry_run,
+        out,
+    )?;
     write_routes(&root, &resource, &actions, options.dry_run, out)?;
     write_pages(&root, &resource, &actions, options.dry_run, out)?;
     if options.dry_run {
         writeln!(out, "Would write src/controllers/mod.rs")?;
         writeln!(out, "Would write src/routes/generated.rs")?;
+        writeln!(out, "Would update src/lib.rs")?;
     } else {
         registration::rewrite(&root, false)?;
+        wiring::apply(&root, &resource, &actions)?;
         writeln!(out, "Wrote src/controllers/mod.rs")?;
         writeln!(out, "Wrote src/routes/generated.rs")?;
+        writeln!(out, "Updated src/lib.rs")?;
         writeln!(out, "Next: gurthang sync routes && gurthang sync payloads")?;
     }
     Ok(())
@@ -102,10 +114,7 @@ fn write_pages(
 ) -> Result<(), Error> {
     for action in actions {
         if let Some(page) = tmpl::page_name(action) {
-            let relative = format!(
-                "resources/js/Pages/{}/{}.tsx",
-                resource.plural_pascal, page
-            );
+            let relative = format!("resources/js/Pages/{}/{}.tsx", resource.plural_pascal, page);
             write_new(
                 root.join(&relative),
                 &relative,
@@ -133,4 +142,3 @@ fn write_new(
     writeln!(out, "Wrote {relative}")?;
     Ok(())
 }
-

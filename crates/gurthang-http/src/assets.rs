@@ -48,9 +48,10 @@ impl AssetResolver {
     pub fn from_manifest_bytes(bytes: &[u8]) -> Result<Self, AssetError> {
         let manifest: HashMap<String, ManifestEntry> = serde_json::from_slice(bytes)
             .map_err(|error| AssetError(format!("invalid Vite manifest: {error}")))?;
-        let entry = manifest.get(ENTRYPOINT).cloned().ok_or_else(|| {
-            AssetError(format!("Vite manifest has no {ENTRYPOINT} entry"))
-        })?;
+        let entry = manifest
+            .get(ENTRYPOINT)
+            .cloned()
+            .ok_or_else(|| AssetError(format!("Vite manifest has no {ENTRYPOINT} entry")))?;
         Ok(Self::Production { entry })
     }
 
@@ -77,7 +78,11 @@ impl AssetResolver {
     }
 }
 
-pub fn embedded_response(directory: &'static Dir<'static>, path: &str, immutable: bool) -> Response {
+pub fn embedded_response(
+    directory: &'static Dir<'static>,
+    path: &str,
+    immutable: bool,
+) -> Response {
     if !Path::new(path)
         .components()
         .all(|component| matches!(component, std::path::Component::Normal(_)))

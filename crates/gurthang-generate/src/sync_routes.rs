@@ -1,4 +1,4 @@
-use std::{fs, io::Write, path::Path};
+use std::{collections::BTreeMap, fs, io::Write, path::Path};
 
 use gurthang_project::find_root;
 
@@ -10,8 +10,20 @@ pub fn sync(check: bool, out: &mut impl Write) -> Result<(), Error> {
     if !directory.is_dir() {
         return Err(Error::Message("src/routes is missing".into()));
     }
+    let mut catalog = Vec::new();
+    collect_catalog(&directory, &mut catalog)?;
+    let methods = parse_mount(&fs::read_to_string(root.join("src/lib.rs"))?);
     let mut routes = Vec::new();
-    collect_routes(&directory, &mut routes)?;
+    for route in catalog {
+        let Some(method) = methods.get(&route.ident) else {
+            continue;
+        };
+        routes.push(JsRoute {
+            name: route.name,
+            method: method.clone(),
+            path: route.path,
+        });
+    }
     routes.sort_by(|left, right| left.name.cmp(&right.name));
     let contents = tmpl::js_routes(
         &routes
@@ -22,7 +34,9 @@ pub fn sync(check: bool, out: &mut impl Write) -> Result<(), Error> {
     let path = root.join("resources/js/routes.ts");
     if check {
         if path.exists() && fs::read_to_string(&path)? != contents {
-            return Err(Error::Message("resources/js/routes.ts is out of date".into()));
+            return Err(Error::Message(
+                "resources/js/routes.ts is out of date".into(),
+            ));
         }
         registration::rewrite(&root, true)?;
         writeln!(out, "resources/js/routes.ts is current")?;
@@ -37,39 +51,48 @@ pub fn sync(check: bool, out: &mut impl Write) -> Result<(), Error> {
 }
 
 #[derive(Clone, Debug)]
+struct CatalogRoute {
+    ident: String,
+    name: String,
+    path: String,
+}
+
+#[derive(Clone, Debug)]
 struct JsRoute {
     name: String,
     method: String,
     path: String,
 }
 
-fn collect_routes(directory: &Path, routes: &mut Vec<JsRoute>) -> Result<(), Error> {
+fn collect_catalog(directory: &Path, routes: &mut Vec<CatalogRoute>) -> Result<(), Error> {
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            collect_routes(&path, routes)?;
+            collect_catalog(&path, routes)?;
             continue;
         }
         if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
             continue;
         }
-        parse_routes(&fs::read_to_string(&path)?, routes);
+        parse_catalog(&fs::read_to_string(&path)?, routes);
     }
     Ok(())
 }
 
-fn parse_routes(source: &str, routes: &mut Vec<JsRoute>) {
+fn parse_catalog(source: &str, routes: &mut Vec<CatalogRoute>) {
+    let mut ident = None;
     let mut name = None;
-    let mut method = None;
     let mut path = None;
     let mut in_route = false;
     for line in source.lines() {
         let trimmed = line.trim();
+        if let Some(found) = const_ident(trimmed) {
+            ident = Some(found);
+        }
         if trimmed.contains("Route {") {
             in_route = true;
             name = None;
-            method = None;
             path = None;
             continue;
         }
@@ -78,19 +101,55 @@ fn parse_routes(source: &str, routes: &mut Vec<JsRoute>) {
         }
         if let Some(value) = field_value(trimmed, "name") {
             name = Some(value);
-        } else if let Some(value) = field_value(trimmed, "method") {
-            method = Some(value);
         } else if let Some(value) = field_value(trimmed, "path") {
             path = Some(value);
         }
         if trimmed.starts_with("};") || trimmed == "}" {
-            if let (Some(name), Some(method), Some(path)) = (name.take(), method.take(), path.take())
+            if let (Some(ident), Some(name), Some(path)) = (ident.take(), name.take(), path.take())
             {
-                routes.push(JsRoute { name, method, path });
+                routes.push(CatalogRoute { ident, name, path });
             }
             in_route = false;
         }
     }
+}
+
+fn parse_mount(source: &str) -> BTreeMap<String, String> {
+    let mut methods = BTreeMap::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        let Some((ident, verb)) = mount_binding(trimmed) else {
+            continue;
+        };
+        methods.insert(ident, verb.to_uppercase());
+    }
+    methods
+}
+
+fn mount_binding(line: &str) -> Option<(String, String)> {
+    let (left, right) = line.split_once("=>")?;
+    let ident = left.trim().rsplit("::").next()?.trim().to_owned();
+    if ident.is_empty()
+        || !ident
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
+        return None;
+    }
+    let verb = right.trim().split('(').next()?.trim();
+    if !matches!(verb, "get" | "post" | "put" | "patch" | "delete") {
+        return None;
+    }
+    Some((ident, verb.to_owned()))
+}
+
+fn const_ident(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("pub const ")?;
+    let ident = rest.split(':').next()?.trim();
+    if ident.is_empty() {
+        return None;
+    }
+    Some(ident.to_owned())
 }
 
 fn field_value(line: &str, field: &str) -> Option<String> {
@@ -101,24 +160,37 @@ fn field_value(line: &str, field: &str) -> Option<String> {
     Some(rest.to_owned())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn parses_route_constants() {
+    fn parses_route_constants_and_mount_methods() {
         let source = r#"
 pub const LOGIN: Route = Route {
     name: "login",
-    method: "GET",
     path: "/login",
 };
 "#;
         let mut routes = Vec::new();
-        parse_routes(source, &mut routes);
+        parse_catalog(source, &mut routes);
         assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].ident, "LOGIN");
         assert_eq!(routes[0].name, "login");
         assert_eq!(routes[0].path, "/login");
+
+        let methods = parse_mount(
+            r#"
+    let router = gurthang_http::mount!(app, {
+        routes::auth::LOGIN => get(app.auth, Auth::new_login),
+        routes::auth::LOGIN_CREATE => post(app.auth, Auth::login),
+    });
+"#,
+        );
+        assert_eq!(methods.get("LOGIN").map(String::as_str), Some("GET"));
+        assert_eq!(
+            methods.get("LOGIN_CREATE").map(String::as_str),
+            Some("POST")
+        );
     }
 }

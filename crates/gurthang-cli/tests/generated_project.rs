@@ -76,7 +76,6 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "migrations/0001_create_users.sql",
         "migrations/0002_create_sessions.sql",
         "migrations/0003_create_background_jobs.sql",
-        "src/app.rs",
         "src/models.rs",
         "src/bin/seed.rs",
         "src/bin/export_payloads.rs",
@@ -137,7 +136,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
 
     let controllers = fs::read_to_string(destination.join("src/controllers/dashboard.rs")).unwrap();
     assert!(!controllers.contains("sqlx::query"));
-    assert!(controllers.contains(".add_route("));
+    assert!(controllers.contains("pub struct Dashboard"));
+    assert!(controllers.contains("render_ssr("));
     assert!(!controllers.contains("AppState"));
 
     let auth = fs::read_to_string(destination.join("src/services/auth.rs")).unwrap();
@@ -152,14 +152,22 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(sessions.contains("sqlx::query!"));
 
     let welcome = fs::read_to_string(destination.join("src/controllers/welcome.rs")).unwrap();
-    assert!(welcome.contains("InertiaRenderMode::Client"));
-    assert!(welcome.contains("impl InertiaPage for WelcomeProps"));
-    assert!(welcome.contains("add_route(welcome::WELCOME, show)"));
+    assert!(welcome.contains("pub struct Welcome"));
+    assert!(welcome.contains(".render("));
+    assert!(welcome.contains("\"Welcome\""));
+    assert!(!welcome.contains("impl InertiaPage"));
     assert!(!welcome.contains("views::inertia"));
 
+    let lib = fs::read_to_string(destination.join("src/lib.rs")).unwrap();
+    assert!(lib.contains("gurthang_http::mount!"));
+    assert!(lib.contains("get(app.welcome, Welcome::show)"));
+    assert!(lib.contains("pub fn export_payloads("));
+    assert!(lib.contains("pub struct App"));
+
     let routes_mod = fs::read_to_string(destination.join("src/routes/mod.rs")).unwrap();
-    assert!(routes_mod.contains("controllers::register"));
+    assert!(routes_mod.contains("mod generated"));
     assert!(!routes_mod.contains("gurthang:generated"));
+    assert!(!routes_mod.contains("fn router"));
 
     let welcome_route = fs::read_to_string(destination.join("src/routes/welcome.rs")).unwrap();
     assert!(welcome_route.contains("pub const WELCOME"));

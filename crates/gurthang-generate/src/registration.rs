@@ -13,12 +13,7 @@ pub fn rewrite(root: &Path, check: bool) -> Result<(), Error> {
 fn scan_controllers(directory: &Path) -> Result<Vec<tmpl::ControllerModule>, Error> {
     let mut modules = Vec::new();
     for name in rust_modules(directory, &["mod"])? {
-        let source = fs::read_to_string(directory.join(format!("{name}.rs")))?;
-        modules.push(tmpl::ControllerModule {
-            register: source.contains("pub fn register("),
-            export: source.contains("pub fn export_payloads("),
-            name,
-        });
+        modules.push(tmpl::ControllerModule { name });
     }
     Ok(modules)
 }
@@ -52,10 +47,7 @@ fn rust_modules(directory: &Path, skip: &[&str]) -> Result<Vec<String>, Error> {
 fn write_generated(path: &Path, contents: &str, check: bool) -> Result<(), Error> {
     if check {
         if path.exists() && fs::read_to_string(path)? != contents {
-            return Err(Error::Message(format!(
-                "{} is out of date",
-                path.display()
-            )));
+            return Err(Error::Message(format!("{} is out of date", path.display())));
         }
         return Ok(());
     }

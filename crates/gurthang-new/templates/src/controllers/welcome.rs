@@ -1,20 +1,18 @@
 use axum::{
-    extract::State,
     http::{HeaderMap, Method, Uri},
     response::Response,
-    Router,
 };
+use gurthang_inertia::{InertiaRenderer, InertiaRequest};
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::{app::App, error::Result, routes::welcome, services::auth::AuthSession};
-use gurthang_http::AddRoute;
-use gurthang_inertia::{InertiaPage, InertiaRenderMode, InertiaRenderer, InertiaRequest};
+use crate::{error::Result, services::auth::AuthSession};
 
 use super::shared::SharedProps;
 
-pub fn register(router: Router<App>) -> Router<App> {
-    router.add_route(welcome::WELCOME, show)
+#[derive(Clone)]
+pub struct Welcome {
+    pub inertia: InertiaRenderer,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -25,32 +23,26 @@ pub struct WelcomeProps {
     pub status: String,
 }
 
-impl InertiaPage for WelcomeProps {
-    const COMPONENT: &'static str = "Welcome";
-    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;
-}
-
-pub fn export_payloads() -> Result<(), Box<dyn std::error::Error>> {
-    WelcomeProps::export()?;
-    Ok(())
-}
-
-pub async fn show(
-    State(inertia): State<InertiaRenderer>,
-    auth: AuthSession,
-    method: Method,
-    uri: Uri,
-    headers: HeaderMap,
-) -> Result<Response> {
-    let shared = SharedProps::from_auth(&auth).await?;
-    Ok(inertia
-        .render(
-            &InertiaRequest::from_parts(&method, &uri, &headers),
-            WelcomeProps {
-                title: "{{ project_name }}".into(),
-                status: "Inertia React is connected.".into(),
-            },
-            shared,
-        )
-        .await?)
+impl Welcome {
+    pub async fn show(
+        self,
+        auth: AuthSession,
+        method: Method,
+        uri: Uri,
+        headers: HeaderMap,
+    ) -> Result<Response> {
+        let shared = SharedProps::from_auth(&auth).await?;
+        Ok(self
+            .inertia
+            .render(
+                &InertiaRequest::from_parts(&method, &uri, &headers),
+                "Welcome",
+                WelcomeProps {
+                    title: "{{ project_name }}".into(),
+                    status: "Inertia React is connected.".into(),
+                },
+                shared,
+            )
+            .await?)
+    }
 }

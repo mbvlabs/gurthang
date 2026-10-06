@@ -12,6 +12,7 @@ mod schema;
 mod sync_payloads;
 mod sync_routes;
 mod tmpl;
+mod wiring;
 
 use std::io::Write;
 
@@ -64,7 +65,11 @@ pub struct GenerateOptions {
     pub dry_run: bool,
 }
 
-pub fn generate_migration(name: &str, options: GenerateOptions, out: &mut impl Write) -> Result<()> {
+pub fn generate_migration(
+    name: &str,
+    options: GenerateOptions,
+    out: &mut impl Write,
+) -> Result<()> {
     migration::generate(name, options, out)
 }
 

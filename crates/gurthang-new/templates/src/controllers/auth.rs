@@ -2,37 +2,29 @@ use std::collections::BTreeMap;
 
 use axum::{
     body::to_bytes,
-    extract::{Request, State},
+    extract::Request,
     http::{HeaderMap, Method, Uri, header},
     response::Response,
-    Router,
 };
+use gurthang_http::Route;
+use gurthang_inertia::{InertiaRenderer, InertiaRequest, mutation_redirect};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    app::App,
     error::{AppError, Result},
     models::user::{CreateUserData, UserError, normalize_email},
     routes::{auth, dashboard},
     services::auth::{AuthSession, Credentials, RegistrationError},
-};
-use gurthang_http::{AddRoute, Route};
-use gurthang_inertia::{
-    InertiaPage, InertiaRenderMode, InertiaRenderer, InertiaRequest, mutation_redirect,
 };
 
 use super::shared::SharedProps;
 
 const GENERIC_CREDENTIAL_ERROR: &str = "The email or password is incorrect.";
 
-pub fn register(router: Router<App>) -> Router<App> {
-    router
-        .add_route(auth::REGISTER, new_register)
-        .add_route(auth::REGISTER_CREATE, register_user)
-        .add_route(auth::LOGIN, new_login)
-        .add_route(auth::LOGIN_CREATE, login)
-        .add_route(auth::LOGOUT, logout)
+#[derive(Clone)]
+pub struct Auth {
+    pub inertia: InertiaRenderer,
 }
 
 #[derive(Deserialize)]
@@ -48,11 +40,6 @@ pub struct LoginProps {
     pub email: Option<String>,
 }
 
-impl InertiaPage for LoginProps {
-    const COMPONENT: &'static str = "Auth/Login";
-    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;
-}
-
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../resources/js/generated/")]
@@ -60,131 +47,133 @@ pub struct RegisterProps {
     pub email: Option<String>,
 }
 
-impl InertiaPage for RegisterProps {
-    const COMPONENT: &'static str = "Auth/Register";
-    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;
-}
-
-pub fn export_payloads() -> Result<(), Box<dyn std::error::Error>> {
-    LoginProps::export()?;
-    RegisterProps::export()?;
-    Ok(())
-}
-
-pub async fn new_login(
-    State(inertia): State<InertiaRenderer>,
-    auth_session: AuthSession,
-    method: Method,
-    uri: Uri,
-    headers: HeaderMap,
-) -> Result<Response> {
-    if auth_session.user.is_some() {
-        return Ok(mutation_redirect(dashboard::DASHBOARD)?);
+impl Auth {
+    pub async fn new_login(
+        self,
+        auth_session: AuthSession,
+        method: Method,
+        uri: Uri,
+        headers: HeaderMap,
+    ) -> Result<Response> {
+        if auth_session.user.is_some() {
+            return Ok(mutation_redirect(dashboard::DASHBOARD)?);
+        }
+        let email = take_old_email(&auth_session).await?;
+        let shared = SharedProps::from_auth(&auth_session).await?;
+        Ok(self
+            .inertia
+            .render(
+                &InertiaRequest::from_parts(&method, &uri, &headers),
+                "Auth/Login",
+                LoginProps { email },
+                shared,
+            )
+            .await?)
     }
-    let email = take_old_email(&auth_session).await?;
-    let shared = SharedProps::from_auth(&auth_session).await?;
-    Ok(inertia
-        .render(
-            &InertiaRequest::from_parts(&method, &uri, &headers),
-            LoginProps { email },
-            shared,
-        )
-        .await?)
-}
 
-pub async fn new_register(
-    State(inertia): State<InertiaRenderer>,
-    auth_session: AuthSession,
-    method: Method,
-    uri: Uri,
-    headers: HeaderMap,
-) -> Result<Response> {
-    if auth_session.user.is_some() {
-        return Ok(mutation_redirect(dashboard::DASHBOARD)?);
+    pub async fn new_register(
+        self,
+        auth_session: AuthSession,
+        method: Method,
+        uri: Uri,
+        headers: HeaderMap,
+    ) -> Result<Response> {
+        if auth_session.user.is_some() {
+            return Ok(mutation_redirect(dashboard::DASHBOARD)?);
+        }
+        let email = take_old_email(&auth_session).await?;
+        let shared = SharedProps::from_auth(&auth_session).await?;
+        Ok(self
+            .inertia
+            .render(
+                &InertiaRequest::from_parts(&method, &uri, &headers),
+                "Auth/Register",
+                RegisterProps { email },
+                shared,
+            )
+            .await?)
     }
-    let email = take_old_email(&auth_session).await?;
-    let shared = SharedProps::from_auth(&auth_session).await?;
-    Ok(inertia
-        .render(
-            &InertiaRequest::from_parts(&method, &uri, &headers),
-            RegisterProps { email },
-            shared,
-        )
-        .await?)
-}
 
-pub async fn register_user(mut auth_session: AuthSession, request: Request) -> Result<Response> {
-    let form = parse_auth_form(request).await?;
-    let email = normalize_email(&form.email);
-    match auth_session
-        .backend
-        .register(CreateUserData {
-            email: email.clone(),
-            password: form.password,
-        })
-        .await
-    {
-        Ok(user) => {
+    pub async fn register_user(
+        self,
+        mut auth_session: AuthSession,
+        request: Request,
+    ) -> Result<Response> {
+        let _ = self;
+        let form = parse_auth_form(request).await?;
+        let email = normalize_email(&form.email);
+        match auth_session
+            .backend
+            .register(CreateUserData {
+                email: email.clone(),
+                password: form.password,
+            })
+            .await
+        {
+            Ok(user) => {
+                auth_session
+                    .login(&user)
+                    .await
+                    .map_err(|error| AppError::Authentication(error.to_string()))?;
+                flash(&auth_session, "Welcome! Your account is ready.").await?;
+                Ok(mutation_redirect(dashboard::DASHBOARD)?)
+            }
+            Err(RegistrationError::Validation(errors)) => {
+                invalid(&auth_session, auth::REGISTER, email, errors).await
+            }
+            Err(RegistrationError::User(UserError::DuplicateEmail)) => {
+                invalid(
+                    &auth_session,
+                    auth::REGISTER,
+                    email,
+                    BTreeMap::from([("email".into(), "Email has already been registered.".into())]),
+                )
+                .await
+            }
+            Err(error) => {
+                tracing::error!(error = %error, "registration failed");
+                Err(AppError::Internal)
+            }
+        }
+    }
+
+    pub async fn login(self, mut auth_session: AuthSession, request: Request) -> Result<Response> {
+        let _ = self;
+        let form = parse_auth_form(request).await?;
+        let email = normalize_email(&form.email);
+        let user = auth_session
+            .authenticate(Credentials {
+                email: email.clone(),
+                password: form.password,
+            })
+            .await
+            .map_err(|error| AppError::Authentication(error.to_string()))?;
+        if let Some(user) = user {
             auth_session
                 .login(&user)
                 .await
                 .map_err(|error| AppError::Authentication(error.to_string()))?;
-            flash(&auth_session, "Welcome! Your account is ready.").await?;
-            Ok(mutation_redirect(dashboard::DASHBOARD)?)
+            flash(&auth_session, "Signed in successfully.").await?;
+            return Ok(mutation_redirect(dashboard::DASHBOARD)?);
         }
-        Err(RegistrationError::Validation(errors)) => {
-            invalid(&auth_session, auth::REGISTER, email, errors).await
-        }
-        Err(RegistrationError::User(UserError::DuplicateEmail)) => {
-            invalid(
-                &auth_session,
-                auth::REGISTER,
-                email,
-                BTreeMap::from([("email".into(), "Email has already been registered.".into())]),
-            )
-            .await
-        }
-        Err(error) => {
-            tracing::error!(error = %error, "registration failed");
-            Err(AppError::Internal)
-        }
-    }
-}
-
-pub async fn login(mut auth_session: AuthSession, request: Request) -> Result<Response> {
-    let form = parse_auth_form(request).await?;
-    let email = normalize_email(&form.email);
-    let user = auth_session
-        .authenticate(Credentials {
-            email: email.clone(),
-            password: form.password,
-        })
+        invalid(
+            &auth_session,
+            auth::LOGIN,
+            email,
+            BTreeMap::from([("credentials".into(), GENERIC_CREDENTIAL_ERROR.into())]),
+        )
         .await
-        .map_err(|error| AppError::Authentication(error.to_string()))?;
-    if let Some(user) = user {
+    }
+
+    pub async fn logout(self, mut auth_session: AuthSession) -> Result<Response> {
+        let _ = self;
         auth_session
-            .login(&user)
+            .logout()
             .await
             .map_err(|error| AppError::Authentication(error.to_string()))?;
-        flash(&auth_session, "Signed in successfully.").await?;
-        return Ok(mutation_redirect(dashboard::DASHBOARD)?);
+        flash(&auth_session, "Signed out successfully.").await?;
+        Ok(mutation_redirect(auth::LOGIN)?)
     }
-    invalid(
-        &auth_session,
-        auth::LOGIN,
-        email,
-        BTreeMap::from([("credentials".into(), GENERIC_CREDENTIAL_ERROR.into())]),
-    )
-    .await
-}
-
-pub async fn logout(mut auth_session: AuthSession) -> Result<Response> {
-    auth_session
-        .logout()
-        .await
-        .map_err(|error| AppError::Authentication(error.to_string()))?;
-    flash(&auth_session, "Signed out successfully.").await?;
-    Ok(mutation_redirect(auth::LOGIN)?)
 }
 
 async fn invalid(

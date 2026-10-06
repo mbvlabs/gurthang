@@ -26,8 +26,9 @@ APP_ENV=production VITE_DEV_SERVER_URL= target/release/{{ project_name }}
 ## Layout
 
 - `models/` — `query!` / `query_as!`, factories
-- `src/controllers/` — handlers, Inertia page props, and `register()`
-- `src/routes/` — named route catalog
+- `src/lib.rs` — `App`, `mount!`, and TypeScript payload export
+- `src/controllers/` — structs that hold state, handlers, and Inertia page props
+- `src/routes/` — named route catalog (name + path)
 - `src/services/` — auth and workflows
 - `src/jobs/` — typed job enum (SQL stays in `models`)
 

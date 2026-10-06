@@ -104,7 +104,6 @@ scaffold! {
     GenWelcomeProps => "resources/js/generated/WelcomeProps.ts",
     JsRoutes => "resources/js/routes.ts",
     JsSsr => "resources/js/ssr.tsx",
-    SrcApp => "src/app.rs",
     BinExportPayloads => "src/bin/export_payloads.rs",
     BinSeed => "src/bin/seed.rs",
     SrcConfig => "src/config.rs",

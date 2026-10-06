@@ -22,7 +22,11 @@ pub fn write_factory(
     let path = root.join(format!("models/src/factories/{}.rs", resource.snake));
     let contents = tmpl::factory(resource, table)?;
     if dry_run {
-        writeln!(out, "Would write models/src/factories/{}.rs", resource.snake)?;
+        writeln!(
+            out,
+            "Would write models/src/factories/{}.rs",
+            resource.snake
+        )?;
         return Ok(());
     }
     region::write_if_allowed(&path, &contents, false, overwrite)?;
@@ -43,10 +47,7 @@ pub fn sync_one(name: &str, check: bool, out: &mut impl Write) -> Result<(), Err
     let contents = tmpl::factory(&resource, &table)?;
     if check {
         if path.exists() && fs::read_to_string(&path)? != contents {
-            return Err(Error::Message(format!(
-                "{} is out of date",
-                path.display()
-            )));
+            return Err(Error::Message(format!("{} is out of date", path.display())));
         }
         writeln!(out, "{} is current", path.display())?;
         return Ok(());
@@ -91,4 +92,3 @@ fn load_table(root: &Path, table: &str) -> Result<Table, Error> {
         schema::load_table(&pool, table).await
     })
 }
-

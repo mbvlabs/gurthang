@@ -44,16 +44,17 @@ struct JsRoute {
 }
 
 #[derive(Clone, Debug)]
-struct RegisterBinding {
-    ident: String,
-    handler: String,
+pub(crate) struct ControllerModule {
+    pub name: String,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ControllerModule {
-    pub name: String,
-    pub register: bool,
-    pub export: bool,
+pub(crate) struct ControllerWiring {
+    pub module: String,
+    pub field: String,
+    pub struct_name: String,
+    pub mount_lines: Vec<String>,
+    pub export_types: Vec<String>,
 }
 
 #[derive(Template)]
@@ -89,6 +90,7 @@ struct ControllerTemplate {
     snake: String,
     pascal: String,
     plural: String,
+    struct_name: String,
     pk_type: String,
     form_empty: bool,
     form_fields: Vec<NamedType>,
@@ -96,9 +98,12 @@ struct ControllerTemplate {
     item_fields: Vec<NamedType>,
     pages: Vec<ViewPage>,
     has_item_props: bool,
-    bindings: Vec<RegisterBinding>,
     index_ident: String,
     show_ident: String,
+    index_component: String,
+    show_component: String,
+    new_component: String,
+    edit_component: String,
 }
 
 #[derive(Template)]
@@ -168,7 +173,11 @@ pub(crate) fn model(resource: &Resource, table: &Table) -> Result<String, Error>
         update_binds.push(format!("data.{}", column.rust_field));
         update_index += 1;
     }
-    if table.columns.iter().any(|column| column.name == "updated_at") {
+    if table
+        .columns
+        .iter()
+        .any(|column| column.name == "updated_at")
+    {
         update_sets.push(format!("updated_at = ${update_index}"));
         update_binds.push("now".into());
         update_index += 1;
@@ -232,18 +241,11 @@ pub(crate) fn controller(
     let has_item_props = pages
         .iter()
         .any(|page| page.kind == "index" || page.kind == "item");
-    let bindings = actions
-        .iter()
-        .filter_map(|action| route_const(resource, action))
-        .map(|route| RegisterBinding {
-            ident: route.ident,
-            handler: route.handler,
-        })
-        .collect();
     render(ControllerTemplate {
         snake: resource.snake.clone(),
         pascal: resource.pascal.clone(),
         plural: resource.plural_snake.clone(),
+        struct_name: resource.plural_pascal.clone(),
         pk_type: table
             .and_then(primary_key)
             .map(|column| column.rust_type.clone())
@@ -254,10 +256,56 @@ pub(crate) fn controller(
         item_fields,
         pages,
         has_item_props,
-        bindings,
         index_ident: route_ident(resource, "index"),
         show_ident: route_ident(resource, "show"),
+        index_component: page_component(resource, "index"),
+        show_component: page_component(resource, "show"),
+        new_component: page_component(resource, "new"),
+        edit_component: page_component(resource, "edit"),
     })
+}
+
+pub(crate) fn controller_wiring(resource: &Resource, actions: &[String]) -> ControllerWiring {
+    let mount_lines = actions
+        .iter()
+        .filter_map(|action| {
+            let route = route_const(resource, action)?;
+            Some(format!(
+                "        routes::{}::{} => {}(app.{}, {}::{}),",
+                resource.plural_snake,
+                route.ident,
+                route.method.to_lowercase(),
+                resource.plural_snake,
+                resource.plural_pascal,
+                route.handler
+            ))
+        })
+        .collect();
+    let mut export_types = Vec::new();
+    if actions
+        .iter()
+        .any(|action| matches!(action.as_str(), "index" | "show" | "edit"))
+    {
+        export_types.push(format!(
+            "crate::controllers::{}::{}Props",
+            resource.plural_snake, resource.pascal
+        ));
+    }
+    for action in actions {
+        if let Some(name) = props_name(action) {
+            export_types.push(format!(
+                "crate::controllers::{}::{name}",
+                resource.plural_snake
+            ));
+        }
+    }
+    ControllerWiring {
+        module: resource.plural_snake.clone(),
+        field: resource.plural_snake.clone(),
+        struct_name: resource.plural_pascal.clone(),
+        mount_lines,
+        export_types,
+    }
 }
 
 pub(crate) fn routes(resource: &Resource, actions: &[String]) -> Result<String, Error> {
@@ -274,25 +322,6 @@ pub(crate) fn controllers_mod(modules: &[ControllerModule]) -> String {
     for module in modules {
         source.push_str(&format!("pub mod {};\n", module.name));
     }
-    source.push_str(
-        "\npub fn register(router: axum::Router<crate::app::App>) -> axum::Router<crate::app::App> {\n",
-    );
-    for module in modules {
-        if module.register {
-            source.push_str(&format!(
-                "    let router = {}::register(router);\n",
-                module.name
-            ));
-        }
-    }
-    source.push_str("    router\n}\n\n");
-    source.push_str("pub fn export_payloads() -> Result<(), Box<dyn std::error::Error>> {\n");
-    for module in modules {
-        if module.export {
-            source.push_str(&format!("    {}::export_payloads()?;\n", module.name));
-        }
-    }
-    source.push_str("    Ok(())\n}\n");
     source
 }
 
@@ -433,6 +462,12 @@ fn route_parts(resource: &Resource, action: &str) -> Option<(String, &'static st
     }
 }
 
+fn page_component(resource: &Resource, action: &str) -> String {
+    view_page(resource, action)
+        .map(|page| page.component)
+        .unwrap_or_default()
+}
+
 fn view_page(resource: &Resource, action: &str) -> Option<ViewPage> {
     let name = props_name(action)?;
     let page = page_name(action)?;
@@ -496,12 +531,18 @@ mod tests {
         let routes_src =
             js_routes(&[("widgets.index".into(), "GET".into(), "/widgets".into())]).unwrap();
         assert!(factory_src.contains("pub struct WidgetFactory"));
+        assert!(controller_src.contains("pub struct Widgets"));
         assert!(controller_src.contains("pub async fn index"));
-        assert!(controller_src.contains("impl InertiaPage for IndexProps"));
-        assert!(controller_src.contains(".add_route("));
-        assert!(controller_src.contains("pub fn register("));
+        assert!(controller_src.contains(".render("));
+        assert!(controller_src.contains("\"Widgets/Index\""));
+        assert!(!controller_src.contains("impl InertiaPage"));
+        assert!(!controller_src.contains("pub fn register("));
         assert!(!controller_src.contains("AppState"));
         assert!(!controller_src.contains("views::inertia"));
+        let wiring = controller_wiring(&resource, &actions);
+        assert!(wiring.mount_lines.iter().any(|line| {
+            line.contains("routes::widgets::WIDGETS_INDEX => get(app.widgets, Widgets::index)")
+        }));
         assert!(page_src.contains("export default function Index"));
         assert!(routes_src.contains("widgets.index"));
         assert!(routes_src.contains("{${key}}"));
@@ -523,7 +564,10 @@ mod tests {
 }
 
 fn js_key(name: &str) -> String {
-    if name.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
+    if name
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
         name.to_owned()
     } else {
         format!("'{name}'")

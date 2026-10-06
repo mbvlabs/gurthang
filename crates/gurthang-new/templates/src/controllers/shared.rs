@@ -76,11 +76,3 @@ impl From<&User> for SafeUser {
         }
     }
 }
-
-pub fn export_payloads() -> Result<(), Box<dyn std::error::Error>> {
-    SafeUser::export()?;
-    AuthProps::export()?;
-    FlashProps::export()?;
-    SharedProps::export()?;
-    Ok(())
-}

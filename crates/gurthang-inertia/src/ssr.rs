@@ -262,10 +262,8 @@ async fn prepare_bundle(
                         .into(),
                 );
             }
-            let path = std::env::temp_dir().join(format!(
-                "gurthang-{}-inertia-ssr.mjs",
-                std::process::id()
-            ));
+            let path = std::env::temp_dir()
+                .join(format!("gurthang-{}-inertia-ssr.mjs", std::process::id()));
             fs::write(&path, bytes)
                 .await
                 .map_err(|error| format!("could not extract SSR bundle: {error}"))?;
