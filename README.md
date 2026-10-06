@@ -43,13 +43,14 @@ Linux only. Builds use [Mold](https://github.com/rui314/mold) through clang
 
 ## Install
 
-Development releases are GitHub prereleases. Tags look like `v0.1.0-dev.1`.
-Pick one from [Releases](https://github.com/mbvlabs/gurthang/releases) and
-install the CLI from that tag:
+Development releases are a single GitHub prerelease on the `development` tag.
+Install the CLI from [Releases](https://github.com/mbvlabs/gurthang/releases):
 
 ```bash
-cargo install --git https://github.com/mbvlabs/gurthang --tag v0.1.0-dev.1 --locked gurthang-cli
+cargo install --git https://github.com/mbvlabs/gurthang --tag development --locked gurthang-cli
 ```
+
+Reinstall with `--force` after that tag moves.
 
 That build needs `clang` and `mold` on the machine (see Requirements). The
 binary it installs is `gurthang`.
@@ -95,17 +96,16 @@ Day-to-day checks use `SQLX_OFFLINE=true`.
 
 ## Development releases
 
-A development version is a prerelease on GitHub, not a crates.io publish.
-Pushing a `v*-dev` or `v*-dev.*` tag is what starts the release:
+A development version is one moving `development` tag, not a crates.io publish.
+Point that tag at the commit you want and push it:
 
 ```bash
-git tag -a v0.1.0-dev.1 -m "Gurthang v0.1.0-dev.1"
-git push origin v0.1.0-dev.1
+git tag -f development
+git push -f origin development
 ```
 
-The workflow tests the workspace, builds `gurthang`, and publishes a prerelease
-with the Linux binary attached. Install with the `cargo install --git --tag`
-command on the release notes. A push to `master` does not publish.
+The workflow tests the workspace, builds `gurthang`, and creates or updates the
+prerelease with the Linux binary attached. A push to `master` does not publish.
 
 ## Generated layout
 

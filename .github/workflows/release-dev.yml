@@ -3,8 +3,7 @@ name: Development release
 on:
   push:
     tags:
-      - "v*-dev"
-      - "v*-dev.*"
+      - development
 
 concurrency:
   group: development-release-${{ github.ref }}
@@ -65,11 +64,16 @@ jobs:
           Linux x86_64 binary: \`gurthang-x86_64-unknown-linux-gnu\`.
           EOF
           if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" \
+              --prerelease \
+              --title "Gurthang development" \
+              --target "${GITHUB_SHA}" \
+              --notes-file "${notes}"
             gh release upload "${TAG}" gurthang-x86_64-unknown-linux-gnu --clobber
           else
             gh release create "${TAG}" \
               --prerelease \
-              --title "Gurthang ${TAG}" \
+              --title "Gurthang development" \
               --notes-file "${notes}" \
               gurthang-x86_64-unknown-linux-gnu
           fi
