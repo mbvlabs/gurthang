@@ -214,43 +214,48 @@ fn render_controller(resource: &Resource, actions: &[String], table: Option<&Tab
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "use axum::{{\n\
-         \    extract::{{Path, State}},\n\
-         \    http::{{HeaderMap, Method, Uri}},\n\
-         \    response::Response,\n\
-         \    Json,\n\
-         }};\n\
-         use serde::Deserialize;\n\n\
-         use crate::{{\n\
-         \    app::AppState,\n\
-         \    error::{{AppError, Result}},\n\
-         \    models::{snake}::{{Create{pascal}Data, Update{pascal}Data, {pascal}}},\n\
-         \    services::auth::AuthSession,\n\
-         \    views::inertia::{{\n\
-         \        {plural}::{{{view_imports}}},\n\
-         \        shared::SharedProps,\n\
-         \    }},\n\
-         }};\n\
-         use gurthang_inertia::{{InertiaRequest, mutation_redirect}};\n\n\
-         #[derive(Deserialize)]\n\
-         pub struct {pascal}Form {{\n\
-         {form_fields}\n\
-         }}\n\n\
-         impl From<{pascal}Form> for Create{pascal}Data {{\n\
-         \    fn from(form: {pascal}Form) -> Self {{\n\
-         \        Self {{\n\
-         {form_assign}\n\
-         \        }}\n\
-         \    }}\n\
-         }}\n\n\
-         impl From<{pascal}Form> for Update{pascal}Data {{\n\
-         \    fn from(form: {pascal}Form) -> Self {{\n\
-         \        Self {{\n\
-         {form_assign}\n\
-         \        }}\n\
-         \    }}\n\
-         }}\n\n\
-         {methods}",
+        r#"use axum::{{
+    extract::{{Path, State}},
+    http::{{HeaderMap, Method, Uri}},
+    response::Response,
+    Json,
+}};
+use serde::Deserialize;
+
+use crate::{{
+    app::AppState,
+    error::{{AppError, Result}},
+    models::{snake}::{{Create{pascal}Data, Update{pascal}Data, {pascal}}},
+    services::auth::AuthSession,
+    views::inertia::{{
+        {plural}::{{{view_imports}}},
+        shared::SharedProps,
+    }},
+}};
+use gurthang_inertia::{{InertiaRequest, mutation_redirect}};
+
+#[derive(Deserialize)]
+pub struct {pascal}Form {{
+{form_fields}
+}}
+
+impl From<{pascal}Form> for Create{pascal}Data {{
+    fn from(form: {pascal}Form) -> Self {{
+        Self {{
+{form_assign}
+        }}
+    }}
+}}
+
+impl From<{pascal}Form> for Update{pascal}Data {{
+    fn from(form: {pascal}Form) -> Self {{
+        Self {{
+{form_assign}
+        }}
+    }}
+}}
+
+{methods}"#,
         snake = resource.snake,
         pascal = resource.pascal,
         plural = resource.plural_snake,
@@ -312,128 +317,135 @@ fn controller_action(
     let path = &resource.path;
     match action {
         "index" => format!(
-            "pub async fn index(\n\
-             \    State(state): State<AppState>,\n\
-             \    auth: AuthSession,\n\
-             \    method: Method,\n\
-             \    uri: Uri,\n\
-             \    headers: HeaderMap,\n\
-             ) -> Result<Response> {{\n\
-             \    let items = {pascal}::list(&state.database).await?;\n\
-             \    let shared = SharedProps::from_auth(&auth).await?;\n\
-             \    state\n\
-             \        .inertia\n\
-             \        .render(\n\
-             \            &InertiaRequest::from_parts(&method, &uri, &headers),\n\
-             \            IndexProps {{\n\
-             \                {plural}: items.into_iter().map(Into::into).collect(),\n\
-             \            }},\n\
-             \            shared,\n\
-             \        )\n\
-             \        .await\n\
-             \        .map_err(Into::into)\n\
-             }}\n"
+            r#"pub async fn index(
+    State(state): State<AppState>,
+    auth: AuthSession,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Result<Response> {{
+    let items = {pascal}::list(&state.database).await?;
+    let shared = SharedProps::from_auth(&auth).await?;
+    state
+        .inertia
+        .render(
+            &InertiaRequest::from_parts(&method, &uri, &headers),
+            IndexProps {{
+                {plural}: items.into_iter().map(Into::into).collect(),
+            }},
+            shared,
+        )
+        .await
+        .map_err(Into::into)
+}}
+"#
         ),
         "show" => format!(
-            "pub async fn show(\n\
-             \    State(state): State<AppState>,\n\
-             \    auth: AuthSession,\n\
-             \    Path(id): Path<{pk_type}>,\n\
-             \    method: Method,\n\
-             \    uri: Uri,\n\
-             \    headers: HeaderMap,\n\
-             ) -> Result<Response> {{\n\
-             \    let Some({snake}) = {pascal}::find(&state.database, id).await? else {{\n\
-             \        return Err(AppError::NotFound);\n\
-             \    }};\n\
-             \    let shared = SharedProps::from_auth(&auth).await?;\n\
-             \    state\n\
-             \        .inertia\n\
-             \        .render(\n\
-             \            &InertiaRequest::from_parts(&method, &uri, &headers),\n\
-             \            ShowProps {{\n\
-             \                {snake}: {snake}.into(),\n\
-             \            }},\n\
-             \            shared,\n\
-             \        )\n\
-             \        .await\n\
-             \        .map_err(Into::into)\n\
-             }}\n"
+            r#"pub async fn show(
+    State(state): State<AppState>,
+    auth: AuthSession,
+    Path(id): Path<{pk_type}>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Result<Response> {{
+    let Some({snake}) = {pascal}::find(&state.database, id).await? else {{
+        return Err(AppError::NotFound);
+    }};
+    let shared = SharedProps::from_auth(&auth).await?;
+    state
+        .inertia
+        .render(
+            &InertiaRequest::from_parts(&method, &uri, &headers),
+            ShowProps {{
+                {snake}: {snake}.into(),
+            }},
+            shared,
+        )
+        .await
+        .map_err(Into::into)
+}}
+"#
         ),
         "new" => format!(
-            "pub async fn new(\n\
-             \    State(state): State<AppState>,\n\
-             \    auth: AuthSession,\n\
-             \    method: Method,\n\
-             \    uri: Uri,\n\
-             \    headers: HeaderMap,\n\
-             ) -> Result<Response> {{\n\
-             \    let shared = SharedProps::from_auth(&auth).await?;\n\
-             \    state\n\
-             \        .inertia\n\
-             \        .render(\n\
-             \            &InertiaRequest::from_parts(&method, &uri, &headers),\n\
-             \            NewProps {{}},\n\
-             \            shared,\n\
-             \        )\n\
-             \        .await\n\
-             \        .map_err(Into::into)\n\
-             }}\n"
+            r#"pub async fn new(
+    State(state): State<AppState>,
+    auth: AuthSession,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Result<Response> {{
+    let shared = SharedProps::from_auth(&auth).await?;
+    state
+        .inertia
+        .render(
+            &InertiaRequest::from_parts(&method, &uri, &headers),
+            NewProps {{}},
+            shared,
+        )
+        .await
+        .map_err(Into::into)
+}}
+"#
         ),
         "create" => format!(
-            "pub async fn create(\n\
-             \    State(state): State<AppState>,\n\
-             \    Json(form): Json<{pascal}Form>,\n\
-             ) -> Result<Response> {{\n\
-             \    {pascal}::create(&state.database, form.into()).await?;\n\
-             \    mutation_redirect(\"{path}\").map_err(Into::into)\n\
-             }}\n"
+            r#"pub async fn create(
+    State(state): State<AppState>,
+    Json(form): Json<{pascal}Form>,
+) -> Result<Response> {{
+    {pascal}::create(&state.database, form.into()).await?;
+    mutation_redirect("{path}").map_err(Into::into)
+}}
+"#
         ),
         "edit" => format!(
-            "pub async fn edit(\n\
-             \    State(state): State<AppState>,\n\
-             \    auth: AuthSession,\n\
-             \    Path(id): Path<{pk_type}>,\n\
-             \    method: Method,\n\
-             \    uri: Uri,\n\
-             \    headers: HeaderMap,\n\
-             ) -> Result<Response> {{\n\
-             \    let Some({snake}) = {pascal}::find(&state.database, id).await? else {{\n\
-             \        return Err(AppError::NotFound);\n\
-             \    }};\n\
-             \    let shared = SharedProps::from_auth(&auth).await?;\n\
-             \    state\n\
-             \        .inertia\n\
-             \        .render(\n\
-             \            &InertiaRequest::from_parts(&method, &uri, &headers),\n\
-             \            EditProps {{\n\
-             \                {snake}: {snake}.into(),\n\
-             \            }},\n\
-             \            shared,\n\
-             \        )\n\
-             \        .await\n\
-             \        .map_err(Into::into)\n\
-             }}\n"
+            r#"pub async fn edit(
+    State(state): State<AppState>,
+    auth: AuthSession,
+    Path(id): Path<{pk_type}>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Result<Response> {{
+    let Some({snake}) = {pascal}::find(&state.database, id).await? else {{
+        return Err(AppError::NotFound);
+    }};
+    let shared = SharedProps::from_auth(&auth).await?;
+    state
+        .inertia
+        .render(
+            &InertiaRequest::from_parts(&method, &uri, &headers),
+            EditProps {{
+                {snake}: {snake}.into(),
+            }},
+            shared,
+        )
+        .await
+        .map_err(Into::into)
+}}
+"#
         ),
         "update" => format!(
-            "pub async fn update(\n\
-             \    State(state): State<AppState>,\n\
-             \    Path(id): Path<{pk_type}>,\n\
-             \    Json(form): Json<{pascal}Form>,\n\
-             ) -> Result<Response> {{\n\
-             \    {pascal}::update(&state.database, id, form.into()).await?;\n\
-             \    mutation_redirect(&format!(\"{path}/{id}\"))\n\
-             \        .map_err(Into::into)\n\
-             }}\n"
+            r#"pub async fn update(
+    State(state): State<AppState>,
+    Path(id): Path<{pk_type}>,
+    Json(form): Json<{pascal}Form>,
+) -> Result<Response> {{
+    {pascal}::update(&state.database, id, form.into()).await?;
+    mutation_redirect(&format!("{path}/{{id}}"))
+        .map_err(Into::into)
+}}
+"#
         ),
         "destroy" => format!(
-            "pub async fn destroy(\n\
-             \    State(state): State<AppState>,\n\
-             \    Path(id): Path<{pk_type}>,\n\
-             ) -> Result<Response> {{\n\
-             \    {pascal}::delete(&state.database, id).await?;\n\
-             \    mutation_redirect(\"{path}\").map_err(Into::into)\n\
-             }}\n"
+            r#"pub async fn destroy(
+    State(state): State<AppState>,
+    Path(id): Path<{pk_type}>,
+) -> Result<Response> {{
+    {pascal}::delete(&state.database, id).await?;
+    mutation_redirect("{path}").map_err(Into::into)
+}}
+"#
         ),
         other => format!("// unsupported action {other}\n"),
     }
@@ -451,17 +463,21 @@ fn render_routes(resource: &Resource, actions: &[String]) -> String {
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "use axum::{{Router, routing::{{{uses}}}}};\n\
-         use gurthang_http::Route;\n\n\
-         use crate::{{\n\
-         \    app::AppState,\n\
-         \    controllers::{module},\n\
-         }};\n\n\
-         {consts}\n\n\
-         pub fn mount(router: Router<AppState>) -> Router<AppState> {{\n\
-         \    router\n\
-         {mounts}\n\
-         }}\n",
+        r#"use axum::{{Router, routing::{{{uses}}}}};
+use gurthang_http::Route;
+
+use crate::{{
+    app::AppState,
+    controllers::{module},
+}};
+
+{consts}
+
+pub fn mount(router: Router<AppState>) -> Router<AppState> {{
+    router
+{mounts}
+}}
+"#,
         uses = route_uses(actions),
         module = resource.plural_snake,
     )
@@ -492,11 +508,11 @@ fn route_const(resource: &Resource, action: &str) -> Option<String> {
         action.to_uppercase()
     );
     Some(format!(
-        "pub const {ident}: Route = Route {{\n\
-         \    name: \"{name}\",\n\
-         \    method: \"{method}\",\n\
-         \    path: \"{path}\",\n\
-         }};"
+        r#"pub const {ident}: Route = Route {{
+    name: "{name}",
+    method: "{method}",
+    path: "{path}",
+}};"#
     ))
 }
 
@@ -542,24 +558,28 @@ fn render_views(resource: &Resource, actions: &[String], table: Option<&Table>) 
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "use serde::Serialize;\n\
-         use ts_rs::TS;\n\n\
-         use gurthang_inertia::{{InertiaPage, InertiaRenderMode}};\n\
-         use crate::models::{snake}::{pascal};\n\n\
-         #[derive(Clone, Debug, Serialize, TS)]\n\
-         #[serde(rename_all = \"camelCase\")]\n\
-         #[ts(export, export_to = \"../resources/js/generated/\")]\n\
-         pub struct {pascal}Props {{\n\
-         {item_fields}\n\
-         }}\n\n\
-         impl From<{pascal}> for {pascal}Props {{\n\
-         \    fn from(item: {pascal}) -> Self {{\n\
-         \        Self {{\n\
-         {from_fields}\n\
-         \        }}\n\
-         \    }}\n\
-         }}\n\n\
-         {pages}",
+        r#"use serde::Serialize;
+use ts_rs::TS;
+
+use gurthang_inertia::{{InertiaPage, InertiaRenderMode}};
+use crate::models::{snake}::{pascal};
+
+#[derive(Clone, Debug, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../resources/js/generated/")]
+pub struct {pascal}Props {{
+{item_fields}
+}}
+
+impl From<{pascal}> for {pascal}Props {{
+    fn from(item: {pascal}) -> Self {{
+        Self {{
+{from_fields}
+        }}
+    }}
+}}
+
+{pages}"#,
         snake = resource.snake,
         pascal = resource.pascal,
         from_fields = from_fields(table),
@@ -605,16 +625,18 @@ fn view_props(resource: &Resource, action: &str) -> Option<String> {
         _ => return None,
     };
     Some(format!(
-        "#[derive(Debug, Serialize, TS)]\n\
-         #[serde(rename_all = \"camelCase\")]\n\
-         #[ts(export, export_to = \"../resources/js/generated/\")]\n\
-         pub struct {name} {{\n\
-         {fields}\n\
-         }}\n\n\
-         impl InertiaPage for {name} {{\n\
-         \    const COMPONENT: &'static str = \"{component}\";\n\
-         \    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;\n\
-         }}\n"
+        r#"#[derive(Debug, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../resources/js/generated/")]
+pub struct {name} {{
+{fields}
+}}
+
+impl InertiaPage for {name} {{
+    const COMPONENT: &'static str = "{component}";
+    const RENDER_MODE: InertiaRenderMode = InertiaRenderMode::Client;
+}}
+"#
     ))
 }
 
@@ -642,16 +664,18 @@ fn render_page(resource: &Resource, action: &str) -> String {
     let page = page_name(action).unwrap_or("Index");
     let title = format!("{} {page}", resource.plural_pascal);
     format!(
-        "import {{ Head }} from '@inertiajs/react'\n\n\
-         export default function {page}() {{\n\
-         \  return (\n\
-         \    <main className=\"min-h-screen bg-slate-950 px-6 py-20 text-slate-100\">\n\
-         \      <Head title=\"{title}\" />\n\
-         \      <section className=\"mx-auto max-w-3xl rounded-3xl border border-slate-800 bg-slate-900 p-10\">\n\
-         \        <h1 className=\"text-4xl font-bold\">{title}</h1>\n\
-         \      </section>\n\
-         \    </main>\n\
-         \  )\n\
-         }}\n"
+        r#"import {{ Head }} from '@inertiajs/react'
+
+export default function {page}() {{
+  return (
+    <main className="min-h-screen bg-slate-950 px-6 py-20 text-slate-100">
+      <Head title="{title}" />
+      <section className="mx-auto max-w-3xl rounded-3xl border border-slate-800 bg-slate-900 p-10">
+        <h1 className="text-4xl font-bold">{title}</h1>
+      </section>
+    </main>
+  )
+}}
+"#
     )
 }

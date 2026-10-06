@@ -111,10 +111,11 @@ fn render_factory(resource: &Resource, table: &Table) -> String {
         .iter()
         .map(|column| {
             format!(
-                "    pub fn {field}(mut self, {field}: impl Into<{ty}>) -> Self {{\n\
-                 \        self.{field} = {field}.into();\n\
-                 \        self\n\
-                 \    }}\n",
+                r#"    pub fn {field}(mut self, {field}: impl Into<{ty}>) -> Self {{
+        self.{field} = {field}.into();
+        self
+    }}
+"#,
                 field = column.rust_field,
                 ty = column.rust_type
             )
@@ -128,34 +129,40 @@ fn render_factory(resource: &Resource, table: &Table) -> String {
         .join("\n");
 
     format!(
-        "{start}\n\
-         use crate::{snake}::{{Create{pascal}Data, {pascal}}};\n\n\
-         #[derive(Clone, Debug)]\n\
-         pub struct {pascal}Factory {{\n\
-         {fields}\n\
-         }}\n\n\
-         impl Default for {pascal}Factory {{\n\
-         \    fn default() -> Self {{\n\
-         \        Self {{\n\
-         {defaults}\n\
-         \        }}\n\
-         \    }}\n\
-         }}\n\n\
-         impl {pascal}Factory {{\n\
-         \    pub fn new() -> Self {{\n\
-         \        Self::default()\n\
-         \    }}\n\n\
-         {setters}\n\
-         \    pub fn data(self) -> Create{pascal}Data {{\n\
-         \        Create{pascal}Data {{\n\
-         {data_fields}\n\
-         \        }}\n\
-         \    }}\n\n\
-         \    pub async fn create(self, pool: &sqlx::PgPool) -> sqlx::Result<{pascal}> {{\n\
-         \        {pascal}::create(pool, self.data()).await\n\
-         \    }}\n\
-         }}\n\
-         {end}\n",
+        r#"{start}
+use crate::{snake}::{{Create{pascal}Data, {pascal}}};
+
+#[derive(Clone, Debug)]
+pub struct {pascal}Factory {{
+{fields}
+}}
+
+impl Default for {pascal}Factory {{
+    fn default() -> Self {{
+        Self {{
+{defaults}
+        }}
+    }}
+}}
+
+impl {pascal}Factory {{
+    pub fn new() -> Self {{
+        Self::default()
+    }}
+
+{setters}
+    pub fn data(self) -> Create{pascal}Data {{
+        Create{pascal}Data {{
+{data_fields}
+        }}
+    }}
+
+    pub async fn create(self, pool: &sqlx::PgPool) -> sqlx::Result<{pascal}> {{
+        {pascal}::create(pool, self.data()).await
+    }}
+}}
+{end}
+"#,
         start = region::GENERATED_START,
         end = region::GENERATED_END,
         snake = resource.snake,

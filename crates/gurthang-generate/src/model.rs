@@ -141,29 +141,33 @@ fn writable_columns(table: &Table) -> Vec<&Column> {
 
 fn find_method(table: &Table, pk: &Column) -> String {
     format!(
-        "    pub async fn find(pool: &sqlx::PgPool, id: {}) -> sqlx::Result<Option<Self>> {{\n\
-         \        sqlx::query_as!(\n\
-         \            Self,\n\
-         \            \"SELECT * FROM {} WHERE {} = $1\",\n\
-         \            id\n\
-         \        )\n\
-         \        .fetch_optional(pool)\n\
-         \        .await\n\
-         \    }}\n\n",
+        r#"    pub async fn find(pool: &sqlx::PgPool, id: {}) -> sqlx::Result<Option<Self>> {{
+        sqlx::query_as!(
+            Self,
+            "SELECT * FROM {} WHERE {} = $1",
+            id
+        )
+        .fetch_optional(pool)
+        .await
+    }}
+
+"#,
         pk.rust_type, table.name, pk.name
     )
 }
 
 fn list_method(table: &Table) -> String {
     format!(
-        "    pub async fn list(pool: &sqlx::PgPool) -> sqlx::Result<Vec<Self>> {{\n\
-         \        sqlx::query_as!(\n\
-         \            Self,\n\
-         \            \"SELECT * FROM {} ORDER BY 1\"\n\
-         \        )\n\
-         \        .fetch_all(pool)\n\
-         \        .await\n\
-         \    }}\n\n",
+        r#"    pub async fn list(pool: &sqlx::PgPool) -> sqlx::Result<Vec<Self>> {{
+        sqlx::query_as!(
+            Self,
+            "SELECT * FROM {} ORDER BY 1"
+        )
+        .fetch_all(pool)
+        .await
+    }}
+
+"#,
         table.name
     )
 }
@@ -199,17 +203,18 @@ fn create_method(resource: &Resource, table: &Table) -> String {
         index += 1;
     }
     format!(
-        "    pub async fn create(pool: &sqlx::PgPool, data: Create{}Data) -> sqlx::Result<Self> {{\n\
-         {id_line}\
-         \        let now = chrono::Utc::now();\n\
-         \        sqlx::query_as!(\n\
-         \            Self,\n\
-         \            \"INSERT INTO {} ({}) VALUES ({}) RETURNING *\",\n\
-         {}\n\
-         \        )\n\
-         \        .fetch_one(pool)\n\
-         \        .await\n\
-         \    }}\n\n",
+        r#"    pub async fn create(pool: &sqlx::PgPool, data: Create{}Data) -> sqlx::Result<Self> {{
+{id_line}        let now = chrono::Utc::now();
+        sqlx::query_as!(
+            Self,
+            "INSERT INTO {} ({}) VALUES ({}) RETURNING *",
+{}
+        )
+        .fetch_one(pool)
+        .await
+    }}
+
+"#,
         resource.pascal,
         table.name,
         columns.join(", "),
@@ -235,36 +240,40 @@ fn update_method(resource: &Resource, table: &Table, pk: &Column) -> String {
     }
     binds.push("            id,".into());
     format!(
-        "    pub async fn update(pool: &sqlx::PgPool, id: {}, data: Update{}Data) -> sqlx::Result<Self> {{\n\
-         \        let now = chrono::Utc::now();\n\
-         \        sqlx::query_as!(\n\
-         \            Self,\n\
-         \            \"UPDATE {} SET {} WHERE {} = ${index} RETURNING *\",\n\
-         {}\n\
-         \        )\n\
-         \        .fetch_one(pool)\n\
-         \        .await\n\
-         \    }}\n\n",
+        r#"    pub async fn update(pool: &sqlx::PgPool, id: {}, data: Update{}Data) -> sqlx::Result<Self> {{
+        let now = chrono::Utc::now();
+        sqlx::query_as!(
+            Self,
+            "UPDATE {} SET {} WHERE {} = ${index} RETURNING *",
+{}
+        )
+        .fetch_one(pool)
+        .await
+    }}
+
+"#,
         pk.rust_type,
         resource.pascal,
         table.name,
         sets.join(", "),
         pk.name,
         binds.join("\n"),
+        index = index,
     )
 }
 
 fn delete_method(table: &Table, pk: &Column) -> String {
     format!(
-        "    pub async fn delete(pool: &sqlx::PgPool, id: {}) -> sqlx::Result<u64> {{\n\
-         \        Ok(sqlx::query!(\n\
-         \            \"DELETE FROM {} WHERE {} = $1\",\n\
-         \            id\n\
-         \        )\n\
-         \        .execute(pool)\n\
-         \        .await?\n\
-         \        .rows_affected())\n\
-         \    }}\n",
+        r#"    pub async fn delete(pool: &sqlx::PgPool, id: {}) -> sqlx::Result<u64> {{
+        Ok(sqlx::query!(
+            "DELETE FROM {} WHERE {} = $1",
+            id
+        )
+        .execute(pool)
+        .await?
+        .rows_affected())
+    }}
+"#,
         pk.rust_type, table.name, pk.name
     )
 }

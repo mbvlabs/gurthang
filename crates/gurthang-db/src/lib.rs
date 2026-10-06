@@ -77,8 +77,7 @@ pub fn rebuild(options: DbOptions, out: &mut impl Write) -> Result<()> {
     runtime()?.block_on(async {
         drop_async(&root, out).await?;
         create_async(&root, out).await?;
-        migrate_up_async(&root, out).await?;
-        Ok(())
+        migrate_up_async(&root, out).await
     })?;
     seed(Some("development"), false, out)
 }

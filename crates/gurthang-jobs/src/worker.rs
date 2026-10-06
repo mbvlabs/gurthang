@@ -49,12 +49,23 @@ impl WorkerConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct JobWorker<J> {
     database: PgPool,
     config: WorkerConfig,
     worker_id: Uuid,
     _job: PhantomData<J>,
+}
+
+impl<J> Clone for JobWorker<J> {
+    fn clone(&self) -> Self {
+        Self {
+            database: self.database.clone(),
+            config: self.config.clone(),
+            worker_id: self.worker_id,
+            _job: PhantomData,
+        }
+    }
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -186,7 +197,7 @@ impl<J: PerformJob> JobWorker<J> {
         .await?)
     }
 
-    async fn process(&self, claimed: ClaimedJob) {
+    async fn process(self, claimed: ClaimedJob) {
         let job = match serde_json::from_str::<J>(&claimed.payload) {
             Ok(job) => job,
             Err(error) => {
