@@ -1,0 +1,1 @@
+Welcome to Gurthang, {% raw %}{{ email }}{% endraw %}.

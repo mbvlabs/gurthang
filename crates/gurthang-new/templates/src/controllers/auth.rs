@@ -108,6 +108,7 @@ impl Auth {
 
     pub async fn register_user(
         self,
+        State(ctx): State<Context>,
         mut auth_session: AuthSession,
         request: Request,
     ) -> Result<Response> {
@@ -127,6 +128,11 @@ impl Auth {
                     .login(&user)
                     .await
                     .map_err(|error| AppError::Authentication(error.to_string()))?;
+                if let Err(error) = crate::mailers::auth::AuthMailer::send_welcome(&ctx, &user.0.email)
+                    .await
+                {
+                    tracing::error!(error = %error, "could not enqueue welcome email");
+                }
                 flash(&auth_session, "Welcome! Your account is ready.").await?;
                 Ok(mutation_redirect(dashboard::DASHBOARD)?)
             }

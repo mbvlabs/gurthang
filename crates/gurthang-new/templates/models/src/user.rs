@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
-// gurthang:generated:start
 #[derive(Clone)]
 pub struct User {
     pub id: Uuid,
@@ -18,29 +17,6 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-impl User {
-    pub async fn find(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as!(
-            Self,
-            "SELECT id, email, password_hash, created_at, updated_at FROM users WHERE id = $1",
-            id
-        )
-        .fetch_optional(pool)
-        .await
-    }
-
-    pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<Self>> {
-        sqlx::query_as!(
-            Self,
-            "SELECT id, email, password_hash, created_at, updated_at FROM users ORDER BY email"
-        )
-        .fetch_all(pool)
-        .await
-    }
-}
-// gurthang:generated:end
-
-// gurthang:custom:start
 pub struct CreateUserData {
     pub email: String,
     pub password: String,
@@ -82,6 +58,25 @@ pub enum UserError {
 }
 
 impl User {
+    pub async fn find(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as!(
+            Self,
+            "SELECT id, email, password_hash, created_at, updated_at FROM users WHERE id = $1",
+            id
+        )
+        .fetch_optional(pool)
+        .await
+    }
+
+    pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as!(
+            Self,
+            "SELECT id, email, password_hash, created_at, updated_at FROM users ORDER BY email"
+        )
+        .fetch_all(pool)
+        .await
+    }
+
     pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Self,
@@ -166,4 +161,3 @@ pub fn validate(data: &CreateUserData) -> std::collections::BTreeMap<String, Str
     }
     errors
 }
-// gurthang:custom:end

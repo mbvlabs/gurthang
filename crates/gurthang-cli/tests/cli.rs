@@ -16,7 +16,8 @@ fn help_and_version_are_available() {
                 .and(predicate::str::contains("routes"))
                 .and(predicate::str::contains("task"))
                 .and(predicate::str::contains("db"))
-                .and(predicate::str::contains("build")),
+                .and(predicate::str::contains("build"))
+                .and(predicate::str::contains("middleware")),
         );
 
     Command::cargo_bin("gurthang")
@@ -33,7 +34,12 @@ fn help_and_version_are_available() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("migration").and(predicate::str::contains("model")));
+        .stdout(
+            predicate::str::contains("migration")
+                .and(predicate::str::contains("model"))
+                .and(predicate::str::contains("mailer"))
+                .and(predicate::str::contains("task")),
+        );
 
     Command::cargo_bin("gurthang")
         .unwrap()

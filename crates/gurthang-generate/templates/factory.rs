@@ -1,4 +1,3 @@
-// gurthang:generated:start
 use crate::{{ snake }}::{Create{{ pascal }}Data, {{ pascal }}};
 
 #[derive(Clone, Debug)]
@@ -42,4 +41,4 @@ impl {{ pascal }}Factory {
         {{ pascal }}::create(pool, self.data()).await
     }
 }
-// gurthang:generated:end
+

@@ -1,20 +1,19 @@
-use std::{env, sync::Arc};
+use std::{env, fs, sync::Arc};
 
-use axum::{Router, middleware};
-use axum_login::{AuthManagerLayerBuilder, AuthnBackend};
-use gurthang_http::PostgresSessionStore;
+use axum::Router;
 use gurthang_inertia::InertiaRenderer;
 use gurthang_jobs::JobQueue;
 use sqlx::postgres::PgPoolOptions;
 use tokio::{net::TcpListener, sync::watch};
-use tower_http::{services::ServeDir, trace::TraceLayer};
-use tower_sessions::{Expiry, SessionManagerLayer, cookie::SameSite};
+use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
 
 use crate::{
     app::{Context, Hooks},
-    config::Config,
+    config::{Config, Environment},
+    controller::middleware::{self, apply_stack},
     error::{Error, Result},
+    mailer::EmailSender,
     task::Tasks,
 };
 
@@ -95,12 +94,16 @@ pub async fn start<H: Hooks>() -> Result<()> {
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("task") => run_tasks::<H>(args.collect()).await,
+        Some("middleware") => print_middleware(),
         other => {
             let config = Config::load()?;
             init_tracing(&config);
             let mode = StartMode::parse(other)?;
             let boot = H::boot(mode, config).await?;
-            serve(boot).await
+            let context = boot.context.clone();
+            let result = serve(boot).await;
+            H::on_shutdown(&context).await;
+            result
         }
     }
 }
@@ -114,6 +117,10 @@ pub async fn create_app<H: Hooks>(mode: StartMode, config: Config) -> Result<Boo
         .connect(&config.database_url)
         .await?;
     let jobs = JobQueue::new(db.clone());
+    let mailer = EmailSender::from_config(&config.mailer)?;
+    if let Some(sender) = mailer.clone() {
+        sender.install();
+    }
     let inertia = InertiaRenderer::new("", H::app_name(), "");
     let mut ctx = Context::new(
         environment,
@@ -121,6 +128,7 @@ pub async fn create_app<H: Hooks>(mode: StartMode, config: Config) -> Result<Boo
         Arc::new(config),
         inertia,
         jobs,
+        mailer,
         mode,
         shutdown_receiver,
     );
@@ -137,7 +145,10 @@ pub async fn create_app<H: Hooks>(mode: StartMode, config: Config) -> Result<Boo
     }
 
     let router = if mode.includes_web() {
-        let mut router = H::routes(&ctx).collect();
+        let mut router = H::before_routes(&ctx).await?;
+        router = router.merge(H::routes(&ctx).collect());
+        router = apply_stack(router, H::middlewares(&ctx))?;
+        router = H::after_routes(router, &ctx).await?;
         for initializer in &initializers {
             router = initializer.after_routes(router, &ctx).await?;
         }
@@ -159,34 +170,20 @@ pub async fn create_app<H: Hooks>(mode: StartMode, config: Config) -> Result<Boo
 }
 
 pub fn serve_dev_assets(router: Router<Context>) -> Router<Context> {
-    router
-        .nest_service("/assets", ServeDir::new("assets"))
-        .nest_service("/build", ServeDir::new("dist"))
+    router.nest_service("/assets", ServeDir::new("assets"))
 }
 
-pub fn apply_http_layers<B>(router: Router<Context>, ctx: &Context, backend: B) -> Router<Context>
-where
-    B: AuthnBackend + Clone + Send + Sync + 'static,
-    B::User: Clone + Send + Sync + 'static,
-    B::Credentials: Send + Sync + 'static,
-    B::Error: std::error::Error + Send + Sync + 'static,
-{
-    let session_secure = ctx.config.session.secure;
-    let session_store = PostgresSessionStore::new(ctx.db.clone());
-    let session_layer = SessionManagerLayer::new(session_store)
-        .with_name(ctx.config.session.cookie.clone())
-        .with_http_only(true)
-        .with_same_site(SameSite::Lax)
-        .with_secure(session_secure)
-        .with_expiry(Expiry::OnInactivity(time::Duration::days(7)));
-    let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
-    router
-        .layer(TraceLayer::new_for_http())
-        .layer(middleware::from_fn_with_state(
-            session_secure,
-            gurthang_http::protect,
-        ))
-        .layer(auth_layer)
+fn print_middleware() -> Result<()> {
+    let environment = Environment::from_env();
+    let path = std::path::Path::new("config").join(format!("{}.yaml", environment.as_str()));
+    let yaml = fs::read_to_string(&path)
+        .map_err(|error| Error::Config(format!("could not read {}: {error}", path.display())))?;
+    let mut config = Config::from_yaml(&yaml)?;
+    config.environment = environment;
+    middleware::print_stack(
+        &middleware::stack_from_config(&config),
+        &mut std::io::stdout(),
+    )
 }
 
 async fn serve(boot: BootResult) -> Result<()> {

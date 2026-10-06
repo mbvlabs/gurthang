@@ -4,10 +4,12 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/build/',
+  base: '/assets/dist/',
   build: {
-    manifest: true,
-    outDir: 'dist',
+    manifest: 'manifest.json',
+    assetsDir: '',
+    outDir: 'assets/dist',
+    emptyOutDir: true,
     rollupOptions: {
       input: 'resources/js/app.tsx',
     },
@@ -17,7 +19,11 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     cors: {
-      origin: 'http://127.0.0.1:3000',
+      origin: [
+        'http://127.0.0.1:3000',
+        'http://localhost:3000',
+        'http://[::1]:3000',
+      ],
     },
   },
 })

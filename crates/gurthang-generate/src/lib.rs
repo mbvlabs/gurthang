@@ -2,6 +2,7 @@ mod controller;
 mod env;
 mod factory;
 mod job;
+mod mailer;
 mod migration;
 mod model;
 mod naming;
@@ -11,6 +12,7 @@ mod registration;
 mod schema;
 mod sync_payloads;
 mod sync_routes;
+mod task;
 mod tmpl;
 mod wiring;
 
@@ -115,6 +117,14 @@ pub fn generate_job(name: &str, options: GenerateOptions, out: &mut impl Write) 
         prepare::run(false, out)?;
     }
     Ok(())
+}
+
+pub fn generate_mailer(name: &str, options: GenerateOptions, out: &mut impl Write) -> Result<()> {
+    mailer::generate(name, options, out)
+}
+
+pub fn generate_task(name: &str, options: GenerateOptions, out: &mut impl Write) -> Result<()> {
+    task::generate(name, options, out)
 }
 
 pub fn sync_factory(name: &str, check: bool, out: &mut impl Write) -> Result<()> {

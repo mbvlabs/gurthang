@@ -1,5 +1,5 @@
 /target
 .env
-/dist
+/assets/dist
 /dist-ssr
 /node_modules

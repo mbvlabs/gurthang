@@ -1,16 +1,9 @@
-use std::{fs, io::Write};
+use std::{fs, io::Write, path::Path};
 
 use gurthang_project::find_root;
 use heck::{ToPascalCase, ToSnakeCase};
 
-use crate::{Error, GenerateOptions, region};
-
-const VARIANTS_START: &str = "// gurthang:generated:variants:start";
-const VARIANTS_END: &str = "// gurthang:generated:variants:end";
-const NAMES_START: &str = "// gurthang:generated:names:start";
-const NAMES_END: &str = "// gurthang:generated:names:end";
-const HANDLERS_START: &str = "// gurthang:generated:handlers:start";
-const HANDLERS_END: &str = "// gurthang:generated:handlers:end";
+use crate::{Error, GenerateOptions, registration, tmpl};
 
 pub fn generate(name: &str, options: GenerateOptions, out: &mut impl Write) -> Result<(), Error> {
     let root = find_root()?;
@@ -24,10 +17,6 @@ pub fn generate(name: &str, options: GenerateOptions, out: &mut impl Write) -> R
     }
     let pascal = name.to_pascal_case();
     let snake = name.to_snake_case();
-    let source = fs::read_to_string(&workers)?;
-    if source.contains(&format!("Self::{pascal}")) || source.contains(&format!("{pascal},")) {
-        return Err(Error::Message(format!("job {pascal} already exists")));
-    }
     let worker_file = root.join(format!("src/workers/{snake}.rs"));
     if worker_file.exists() {
         return Err(Error::Message(format!(
@@ -36,7 +25,7 @@ pub fn generate(name: &str, options: GenerateOptions, out: &mut impl Write) -> R
     }
     if options.dry_run {
         writeln!(out, "Would write src/workers/{snake}.rs")?;
-        writeln!(out, "Would add Job::{pascal}")?;
+        writeln!(out, "Would rewrite src/workers/generated.rs")?;
         writeln!(out, "Would register workers::{snake} in src/app.rs")?;
         return Ok(());
     }
@@ -44,30 +33,32 @@ pub fn generate(name: &str, options: GenerateOptions, out: &mut impl Write) -> R
     fs::write(&worker_file, worker_source(&pascal, &snake))?;
     let mut source = fs::read_to_string(&workers)?;
     source = ensure_worker_mod(&source, &snake);
-    source = region::ensure_line_in_region(
-        &source,
-        VARIANTS_START,
-        VARIANTS_END,
-        &format!("{pascal},"),
-    )?;
-    source = region::ensure_line_in_region(
-        &source,
-        NAMES_START,
-        NAMES_END,
-        &format!("Self::{pascal} => \"{snake}\","),
-    )?;
-    source = region::ensure_line_in_region(
-        &source,
-        HANDLERS_START,
-        HANDLERS_END,
-        &format!("Self::{pascal} => crate::workers::{snake}::{pascal}.perform(database).await,"),
-    )?;
     fs::write(&workers, source)?;
+    rewrite_generated(&root, false)?;
     register_in_app(&app, &snake)?;
     writeln!(out, "Wrote src/workers/{snake}.rs")?;
-    writeln!(out, "Added Job::{pascal}")?;
+    writeln!(out, "Rewrote src/workers/generated.rs")?;
     writeln!(out, "Registered workers::{snake} in src/app.rs")?;
     Ok(())
+}
+
+fn rewrite_generated(root: &Path, check: bool) -> Result<(), Error> {
+    let directory = root.join("src/workers");
+    let jobs = scan_jobs(&directory)?;
+    let contents = tmpl::workers_generated(&jobs)?;
+    registration::write_generated(&directory.join("generated.rs"), &contents, check)
+}
+
+fn scan_jobs(directory: &Path) -> Result<Vec<tmpl::JobModule>, Error> {
+    Ok(
+        registration::rust_modules(directory, &["mod", "generated"])?
+            .into_iter()
+            .map(|snake| tmpl::JobModule {
+                pascal: snake.to_pascal_case(),
+                snake,
+            })
+            .collect(),
+    )
 }
 
 fn ensure_worker_mod(source: &str, snake: &str) -> String {
@@ -194,5 +185,37 @@ mod tests {
         assert!(
             updated.find("send_welcome").unwrap() > updated.find("purge_expired_sessions").unwrap()
         );
+    }
+
+    #[test]
+    fn inserts_worker_mod_before_the_include() {
+        let source = "pub mod purge_expired_sessions;\n\ninclude!(\"generated.rs\");\n";
+        let updated = ensure_worker_mod(source, "send_welcome");
+        assert!(updated.contains("pub mod send_welcome;"));
+        assert!(
+            updated.find("pub mod send_welcome;").unwrap()
+                < updated.find("include!(\"generated.rs\")").unwrap()
+        );
+    }
+
+    #[test]
+    fn rewrites_job_enum_from_worker_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let workers = directory.path().join("src/workers");
+        fs::create_dir_all(&workers).unwrap();
+        fs::write(
+            workers.join("mod.rs"),
+            "pub mod purge_expired_sessions;\ninclude!(\"generated.rs\");\n",
+        )
+        .unwrap();
+        fs::write(workers.join("purge_expired_sessions.rs"), "").unwrap();
+        fs::write(workers.join("send_welcome.rs"), "").unwrap();
+        rewrite_generated(directory.path(), false).unwrap();
+        let source = fs::read_to_string(workers.join("generated.rs")).unwrap();
+        assert!(source.contains("PurgeExpiredSessions,"));
+        assert!(source.contains("SendWelcome,"));
+        assert!(source.contains("Mailer(Email)"));
+        assert!(source.contains("send_welcome::SendWelcome"));
+        assert!(!source.contains("gurthang:generated"));
     }
 }

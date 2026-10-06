@@ -49,6 +49,12 @@ pub(crate) struct ControllerModule {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct JobModule {
+    pub pascal: String,
+    pub snake: String,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct ControllerWiring {
     pub add_route: String,
     pub export_types: Vec<String>,
@@ -79,6 +85,18 @@ struct FactoryTemplate {
     snake: String,
     pascal: String,
     fields: Vec<FactoryField>,
+}
+
+#[derive(Template)]
+#[template(path = "model_wrapper.rs", escape = "none")]
+struct ModelWrapperTemplate {
+    snake: String,
+}
+
+#[derive(Template)]
+#[template(path = "workers_generated.rs", escape = "none")]
+struct WorkersGeneratedTemplate {
+    jobs: Vec<JobModule>,
 }
 
 #[derive(Template)]
@@ -199,6 +217,18 @@ pub(crate) fn model(resource: &Resource, table: &Table) -> Result<String, Error>
         update_sets: update_sets.join(", "),
         update_binds,
         update_pk_index: update_index,
+    })
+}
+
+pub(crate) fn model_wrapper(resource: &Resource) -> Result<String, Error> {
+    render(ModelWrapperTemplate {
+        snake: resource.snake.clone(),
+    })
+}
+
+pub(crate) fn workers_generated(jobs: &[JobModule]) -> Result<String, Error> {
+    render(WorkersGeneratedTemplate {
+        jobs: jobs.to_vec(),
     })
 }
 
@@ -518,6 +548,25 @@ mod tests {
         let routes_src =
             js_routes(&[("widgets.index".into(), "GET".into(), "/widgets".into())]).unwrap();
         assert!(factory_src.contains("pub struct WidgetFactory"));
+        assert!(!factory_src.contains("gurthang:generated"));
+        assert!(!factory_src.contains("gurthang:custom"));
+        let jobs = workers_generated(&[
+            JobModule {
+                pascal: "PurgeExpiredSessions".into(),
+                snake: "purge_expired_sessions".into(),
+            },
+            JobModule {
+                pascal: "SendWelcome".into(),
+                snake: "send_welcome".into(),
+            },
+        ])
+        .unwrap();
+        assert!(jobs.contains("PurgeExpiredSessions,"));
+        assert!(jobs.contains("SendWelcome,"));
+        assert!(jobs.contains("Mailer(Email)"));
+        assert!(jobs.contains("Self::SendWelcome => \"send_welcome\""));
+        assert!(jobs.contains("send_welcome::SendWelcome"));
+        assert!(!jobs.contains("gurthang:generated"));
         assert!(controller_src.contains("pub struct Widgets"));
         assert!(controller_src.contains("pub async fn index"));
         assert!(controller_src.contains(".render("));

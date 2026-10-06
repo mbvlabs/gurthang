@@ -22,7 +22,7 @@ fn scan_routes(directory: &Path) -> Result<Vec<String>, Error> {
     rust_modules(directory, &["mod", "generated"])
 }
 
-fn rust_modules(directory: &Path, skip: &[&str]) -> Result<Vec<String>, Error> {
+pub(crate) fn rust_modules(directory: &Path, skip: &[&str]) -> Result<Vec<String>, Error> {
     let mut names = Vec::new();
     if !directory.is_dir() {
         return Ok(names);
@@ -44,7 +44,7 @@ fn rust_modules(directory: &Path, skip: &[&str]) -> Result<Vec<String>, Error> {
     Ok(names)
 }
 
-fn write_generated(path: &Path, contents: &str, check: bool) -> Result<(), Error> {
+pub(crate) fn write_generated(path: &Path, contents: &str, check: bool) -> Result<(), Error> {
     if check {
         if path.exists() && fs::read_to_string(path)? != contents {
             return Err(Error::Message(format!("{} is out of date", path.display())));

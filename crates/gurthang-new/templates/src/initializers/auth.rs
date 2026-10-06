@@ -16,7 +16,7 @@ impl Initializer for AuthInitializer {
         router: Router<Context>,
         ctx: &Context,
     ) -> gurthang::Result<Router<Context>> {
-        Ok(gurthang::apply_http_layers(
+        Ok(session_auth::layer(
             router,
             ctx,
             AuthBackend::new(ctx.db.clone()),

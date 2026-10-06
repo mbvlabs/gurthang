@@ -29,6 +29,18 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
                 .any(|value| value == b"__GURTHANG_"),
             "placeholder remains in {path}"
         );
+        assert!(
+            !bytes
+                .windows(b"gurthang:generated".len())
+                .any(|value| value == b"gurthang:generated"),
+            "generated marker remains in {path}"
+        );
+        assert!(
+            !bytes
+                .windows(b"gurthang:custom".len())
+                .any(|value| value == b"gurthang:custom"),
+            "custom marker remains in {path}"
+        );
     }
 
     let cargo = fs::read_to_string(destination.join("Cargo.toml")).unwrap();
@@ -47,7 +59,9 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(cargo.contains("[workspace]"));
     assert!(cargo.contains("default-run = \"sample-app\""));
     assert!(cargo.contains("sample_app_models"));
-    assert!(!cargo.contains("tera"));
+    assert!(!cargo.contains("include_dir"));
+    assert!(cargo.contains("rust-embed"));
+    assert!(cargo.contains("askama"));
     assert!(!cargo.contains("datastar"));
     assert!(!cargo.contains("src/domain"));
     assert!(!cargo.contains("loco_rs"));
@@ -98,13 +112,16 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "src/controllers/dashboard.rs",
         "src/controllers/welcome.rs",
         "src/workers/mod.rs",
+        "src/workers/generated.rs",
         "src/workers/purge_expired_sessions.rs",
         "src/tasks/mod.rs",
         "src/mailers/mod.rs",
         "src/mailers/auth.rs",
+        "src/mailers/auth/welcome.html",
+        "src/mailers/auth/welcome.txt",
+        "askama.toml",
         "src/initializers/mod.rs",
         "src/initializers/view_engine.rs",
-        "src/initializers/assets.rs",
         "src/initializers/auth.rs",
         "src/services/auth.rs",
         "src/routes/mod.rs",
@@ -116,6 +133,7 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
         "src/assets.rs",
         "css/base.css",
         "assets/.gitkeep",
+        "assets/keep.txt",
         "resources/js/Pages/Welcome.tsx",
         "resources/js/Pages/Auth/Login.tsx",
         "resources/js/ssr.tsx",
@@ -156,6 +174,19 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     let mold = fs::read_to_string(destination.join(".cargo/config.toml")).unwrap();
     assert!(mold.contains("fuse-ld=mold"));
 
+    let vite = fs::read_to_string(destination.join("vite.config.ts")).unwrap();
+    assert!(vite.contains("base: '/assets/dist/'"));
+    assert!(vite.contains("outDir: 'assets/dist'"));
+    assert!(vite.contains("manifest: 'manifest.json'"));
+    assert!(vite.contains("http://localhost:3000"));
+
+    let assets = fs::read_to_string(destination.join("src/assets.rs")).unwrap();
+    assert!(assets.contains("RustEmbed"));
+    assert!(assets.contains("#[folder = \"assets/\"]"));
+    assert!(assets.contains("dist/manifest.json"));
+    assert!(!assets.contains("include_dir!"));
+    assert!(!assets.contains("/build/"));
+
     let env = fs::read_to_string(destination.join(".env.example")).unwrap();
     assert!(env.contains("SQLX_OFFLINE=true"));
     assert!(env.contains("DATABASE_URL="));
@@ -166,12 +197,17 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(development.contains("port: 3000"));
     assert!(development.contains("ssr_runtime:"));
     assert!(development.contains("concurrency:"));
+    assert!(development.contains("csrf:"));
+    assert!(development.contains("session_auth:"));
+    assert!(development.contains("mailer:"));
+    assert!(development.contains("stub: true"));
 
     let user = fs::read_to_string(destination.join("models/src/user.rs")).unwrap();
     assert!(user.contains("sqlx::query_as!"));
     assert!(user.contains("SELECT id, email, password_hash, created_at, updated_at FROM users"));
     assert!(!user.contains("created_at: _"));
-    assert!(user.contains("gurthang:custom:start"));
+    assert!(!user.contains("gurthang:generated"));
+    assert!(!user.contains("gurthang:custom"));
     assert!(!user.contains("impl AuthUser for User"));
 
     let controllers = fs::read_to_string(destination.join("src/controllers/dashboard.rs")).unwrap();
@@ -182,13 +218,24 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(!controllers.contains("AppState"));
     assert!(!controllers.contains("AppContext"));
 
+    let auth_controller = fs::read_to_string(destination.join("src/controllers/auth.rs")).unwrap();
+    assert!(auth_controller.contains("AuthMailer::send_welcome"));
+
     let auth = fs::read_to_string(destination.join("src/services/auth.rs")).unwrap();
     assert!(auth.contains("impl axum_login::AuthUser for AuthUser"));
 
     let workers = fs::read_to_string(destination.join("src/workers/mod.rs")).unwrap();
     assert!(!workers.contains("sqlx::query!"));
-    assert!(workers.contains("purge_expired"));
-    assert!(workers.contains("impl PerformJob for Job"));
+    assert!(workers.contains("pub mod purge_expired_sessions;"));
+    assert!(workers.contains("include!(\"generated.rs\")"));
+    assert!(!workers.contains("impl PerformJob for Job"));
+
+    let workers_generated =
+        fs::read_to_string(destination.join("src/workers/generated.rs")).unwrap();
+    assert!(workers_generated.contains("impl PerformJob for Job"));
+    assert!(workers_generated.contains("Mailer(Email)"));
+    assert!(workers_generated.contains("gurthang::mailer::perform_job"));
+    assert!(workers_generated.contains("PurgeExpiredSessions"));
 
     let purge =
         fs::read_to_string(destination.join("src/workers/purge_expired_sessions.rs")).unwrap();
@@ -222,6 +269,10 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(app.contains("impl Hooks for App"));
     assert!(app.contains(".add_route(controllers::welcome::routes(ctx))"));
     assert!(app.contains("fn export_payloads()"));
+    assert!(app.contains("async fn after_routes"));
+    assert!(app.contains("crate::assets::mount"));
+    assert!(!app.contains("AssetsInitializer"));
+    assert!(!app.contains("apply_http_layers"));
     assert!(!app.contains("gurthang:routes:end"));
     assert!(!app.contains("AppContext"));
 
@@ -232,6 +283,14 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(routes_mod.contains("generated.rs"));
     assert!(!routes_mod.contains("gurthang:generated"));
     assert!(!routes_mod.contains("fn router"));
+
+    let auth_mailer = fs::read_to_string(destination.join("src/mailers/auth.rs")).unwrap();
+    assert!(auth_mailer.contains("impl Mailer for AuthMailer"));
+    assert!(auth_mailer.contains("send_welcome"));
+
+    let welcome_html =
+        fs::read_to_string(destination.join("src/mailers/auth/welcome.html")).unwrap();
+    assert!(welcome_html.contains("{{ email }}"));
 
     let welcome_route = fs::read_to_string(destination.join("src/routes/welcome.rs")).unwrap();
     assert!(welcome_route.contains("pub const WELCOME"));

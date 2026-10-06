@@ -19,6 +19,7 @@ pub fn run(cli: Cli, out: &mut impl Write) -> Result<()> {
         Command::Sync(args) => sync(args.command, out)?,
         Command::Routes => gurthang_generate::print_routes(out)?,
         Command::Task { name } => task(name.as_deref(), out)?,
+        Command::Middleware => middleware(out)?,
         Command::Db(args) => db(args.command, out)?,
         Command::Build => gurthang_build::execute(out)?,
         Command::Tools(args) => match args.command {
@@ -82,6 +83,20 @@ fn generate(command: GenerateCommand, out: &mut impl Write) -> Result<()> {
                 out,
             )?;
         }
+        GenerateCommand::Mailer { name, dry_run } => {
+            gurthang_generate::generate_mailer(
+                &name,
+                gurthang_generate::GenerateOptions { dry_run },
+                out,
+            )?;
+        }
+        GenerateCommand::Task { name, dry_run } => {
+            gurthang_generate::generate_task(
+                &name,
+                gurthang_generate::GenerateOptions { dry_run },
+                out,
+            )?;
+        }
     }
     Ok(())
 }
@@ -123,6 +138,14 @@ fn db(command: DbCommand, out: &mut impl Write) -> Result<()> {
 }
 
 fn task(name: Option<&str>, out: &mut impl Write) -> Result<()> {
+    run_app_command("task", name, out)
+}
+
+fn middleware(out: &mut impl Write) -> Result<()> {
+    run_app_command("middleware", None, out)
+}
+
+fn run_app_command(subcommand: &str, name: Option<&str>, out: &mut impl Write) -> Result<()> {
     let current = std::env::current_dir().map_err(|error| {
         Error::Message(format!("could not determine current directory: {error}"))
     })?;
@@ -134,18 +157,18 @@ fn task(name: Option<&str>, out: &mut impl Write) -> Result<()> {
         .arg("--bin")
         .arg(&bin)
         .arg("--")
-        .arg("task")
+        .arg(subcommand)
         .current_dir(&root);
     if let Some(name) = name {
         command.arg(name);
-    } else {
+    } else if subcommand == "task" {
         command.arg("--list");
     }
     let status = command
         .status()
         .map_err(|error| Error::Message(format!("could not run cargo: {error}")))?;
     if !status.success() {
-        return Err(Error::Message(format!("task exited with {status}")));
+        return Err(Error::Message(format!("{subcommand} exited with {status}")));
     }
     let _ = out;
     Ok(())

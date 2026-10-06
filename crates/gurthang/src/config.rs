@@ -2,7 +2,10 @@ use std::{env, fs, net::SocketAddr, path::Path, time::Duration};
 
 use serde::Deserialize;
 
-use crate::error::{Error, Result};
+use crate::{
+    controller::middleware,
+    error::{Error, Result},
+};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum Environment {
@@ -55,6 +58,8 @@ pub struct Config {
     pub workers: WorkersConfig,
     #[serde(default)]
     pub logger: LoggerConfig,
+    #[serde(default)]
+    pub mailer: MailerConfig,
     #[serde(skip)]
     pub database_url: String,
     #[serde(skip)]
@@ -66,6 +71,10 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub url: String,
+    #[serde(default)]
+    pub ident: Option<String>,
+    #[serde(default)]
+    pub middlewares: middleware::MiddlewareConfig,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -133,6 +142,59 @@ pub struct LoggerConfig {
 
 fn default_log_level() -> String {
     "info".into()
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct MailerConfig {
+    #[serde(default)]
+    pub stub: bool,
+    #[serde(default)]
+    pub smtp: Option<SmtpMailer>,
+}
+
+impl Default for MailerConfig {
+    fn default() -> Self {
+        Self {
+            stub: true,
+            smtp: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MailerTls {
+    Starttls,
+    Implicit,
+    None,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct SmtpMailer {
+    pub enable: bool,
+    pub host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub secure: bool,
+    #[serde(default)]
+    pub tls: Option<MailerTls>,
+    pub auth: Option<MailerAuth>,
+}
+
+impl SmtpMailer {
+    pub fn tls_mode(&self) -> MailerTls {
+        self.tls.unwrap_or(if self.secure {
+            MailerTls::Starttls
+        } else {
+            MailerTls::None
+        })
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct MailerAuth {
+    pub user: String,
+    pub password: String,
 }
 
 impl Config {
@@ -237,6 +299,59 @@ logger:
         );
         assert_eq!(config.workers.concurrency, 4);
         assert!(config.database_url.is_empty());
+        assert!(config.mailer.stub);
+        assert!(config.server.middlewares.csrf.is_none());
+    }
+
+    #[test]
+    fn parses_middleware_and_mailer_overrides() {
+        let yaml = r#"
+server:
+  host: 127.0.0.1
+  port: 3000
+  url: http://127.0.0.1:3000
+  middlewares:
+    csrf:
+      enable: true
+    session_auth:
+      enable: true
+    cors:
+      enable: false
+session:
+  secure: false
+inertia:
+  ssr_runtime: node
+  ssr_timeout_ms: 5000
+workers:
+  concurrency: 1
+  poll_interval_ms: 1000
+  lease_seconds: 10
+  timeout_seconds: 5
+logger:
+  level: info
+mailer:
+  stub: true
+"#;
+        let config = Config::from_yaml(yaml).unwrap();
+        assert!(config.mailer.stub);
+        assert_eq!(
+            config
+                .server
+                .middlewares
+                .csrf
+                .as_ref()
+                .map(|layer| layer.enable),
+            Some(true)
+        );
+        assert_eq!(
+            config
+                .server
+                .middlewares
+                .session_auth
+                .as_ref()
+                .map(|layer| layer.enable),
+            Some(true)
+        );
     }
 
     #[test]

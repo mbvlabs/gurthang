@@ -2,6 +2,23 @@ server:
   host: 127.0.0.1
   port: 3000
   url: http://127.0.0.1:3000
+  middlewares:
+    catch_panic:
+      enable: true
+    logger:
+      enable: true
+    request_id:
+      enable: true
+    csrf:
+      enable: true
+    session_auth:
+      enable: true
+    static:
+      enable: true
+      must_exist: false
+      folder:
+        uri: /assets
+        path: assets
 session:
   secure: false
   cookie: gurthang.sid
@@ -16,3 +33,5 @@ workers:
   timeout_seconds: 240
 logger:
   level: info
+mailer:
+  stub: true

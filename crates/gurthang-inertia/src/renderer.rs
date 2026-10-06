@@ -1,7 +1,7 @@
 use axum::{
     Json,
     http::{HeaderMap, HeaderValue, StatusCode, header},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
 };
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -123,7 +123,13 @@ impl InertiaRenderer {
             None
         };
         let page_json = serde_json::to_string(&page)?.replace('/', "\\/");
-        Ok(document(&self.title, &self.head_tags, &page_json, ssr.as_ref()).into_response())
+        Ok(Html(document(
+            &self.title,
+            &self.head_tags,
+            &page_json,
+            ssr.as_ref(),
+        ))
+        .into_response())
     }
 }
 
@@ -296,6 +302,10 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "text/html; charset=utf-8"
+        );
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let html = String::from_utf8(body.to_vec()).unwrap();
         assert!(html.contains(r#"<\/script>"#));

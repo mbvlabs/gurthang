@@ -22,7 +22,7 @@ pub enum Command {
     Run,
     /// Write application code from the database or a name.
     Generate(GenerateArgs),
-    /// Refresh generated regions and frontend contracts.
+    /// Refresh generated files and frontend contracts.
     Sync(SyncArgs),
     /// Print named routes and HTTP verbs.
     Routes,
@@ -31,6 +31,8 @@ pub enum Command {
         /// Task name. Omit to list registered tasks.
         name: Option<String>,
     },
+    /// Print the YAML middleware stack with enable flags.
+    Middleware,
     /// Create, migrate, and seed the application database.
     Db(DbArgs),
     /// Build frontend assets and a release binary.
@@ -94,6 +96,18 @@ pub enum GenerateCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Add a mailer with Askama html and text templates.
+    Mailer {
+        name: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Add a task and register it in Hooks::register_tasks.
+    Task {
+        name: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -104,7 +118,7 @@ pub struct SyncArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum SyncCommand {
-    /// Rewrite a model's generated region from the live schema.
+    /// Rewrite models/src/generated/<name>.rs from the live schema.
     Model {
         name: String,
         #[arg(long)]

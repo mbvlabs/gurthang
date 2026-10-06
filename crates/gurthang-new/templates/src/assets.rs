@@ -1,22 +1,40 @@
-use axum::{extract::Path as AxumPath, response::Response};
-use include_dir::{Dir, include_dir};
+use axum::{extract::Path as AxumPath, http::StatusCode, response::IntoResponse, response::Response, routing::get};
+use rust_embed::RustEmbed;
 
-use gurthang::http::embedded_response;
+use gurthang::http::bytes_response;
+use gurthang::prelude::*;
 
-static BUILD_ASSETS: Dir<'_> = include_dir!("$OUT_DIR/dist");
-static PUBLIC_ASSETS: Dir<'_> = include_dir!("$OUT_DIR/assets");
+#[derive(RustEmbed)]
+#[folder = "assets/"]
+struct Assets;
 
 pub fn manifest_bytes() -> &'static [u8] {
-    BUILD_ASSETS
-        .get_file(".vite/manifest.json")
-        .map(|file| file.contents())
-        .unwrap_or_default()
+    static BYTES: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    match Assets::get("dist/manifest.json") {
+        Some(file) => BYTES.get_or_init(|| file.data.into_owned()).as_slice(),
+        None => &[],
+    }
 }
 
-pub async fn serve_build(AxumPath(path): AxumPath<String>) -> Response {
-    embedded_response(&BUILD_ASSETS, &path, true)
+pub async fn serve(AxumPath(path): AxumPath<String>) -> Response {
+    match Assets::get(&path) {
+        Some(file) => bytes_response(&path, &file.data, path.starts_with("dist/")),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
-pub async fn serve_public(AxumPath(path): AxumPath<String>) -> Response {
-    embedded_response(&PUBLIC_ASSETS, &path, false)
+pub fn mount(router: Router<Context>, ctx: &Context) -> Router<Context> {
+    let enabled = ctx
+        .config
+        .server
+        .middlewares
+        .static_assets
+        .as_ref()
+        .map(|layer| layer.enable)
+        .unwrap_or(true);
+    if enabled && !ctx.config.is_development() {
+        router.route("/assets/{*path}", get(serve))
+    } else {
+        router
+    }
 }

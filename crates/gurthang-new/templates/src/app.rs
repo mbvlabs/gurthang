@@ -40,12 +40,15 @@ impl Hooks for App {
         Ok(())
     }
 
+    async fn after_routes(router: Router<Context>, ctx: &Context) -> Result<Router<Context>> {
+        Ok(crate::assets::mount(router, ctx))
+    }
+
     fn register_tasks(_tasks: &mut Tasks) {}
 
     async fn initializers(_ctx: &Context) -> Result<Vec<Box<dyn Initializer>>> {
         Ok(vec![
             Box::new(initializers::view_engine::ViewEngineInitializer),
-            Box::new(initializers::assets::AssetsInitializer),
             Box::new(initializers::auth::AuthInitializer),
         ])
     }

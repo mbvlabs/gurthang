@@ -10,7 +10,9 @@ use tokio::sync::watch;
 use crate::{
     boot::{AppRoutes, BootResult, StartMode},
     config::{Config, Environment},
+    controller::middleware::{MiddlewareLayer, default_middleware_stack},
     error::Result,
+    mailer::EmailSender,
     task::Tasks,
 };
 
@@ -21,6 +23,7 @@ pub struct Context {
     pub config: Arc<Config>,
     pub inertia: InertiaRenderer,
     pub jobs: JobQueue,
+    pub mailer: Option<EmailSender>,
     pub start_mode: StartMode,
     shutdown: watch::Receiver<bool>,
 }
@@ -32,6 +35,7 @@ impl Context {
         config: Arc<Config>,
         inertia: InertiaRenderer,
         jobs: JobQueue,
+        mailer: Option<EmailSender>,
         start_mode: StartMode,
         shutdown: watch::Receiver<bool>,
     ) -> Self {
@@ -41,6 +45,7 @@ impl Context {
             config,
             inertia,
             jobs,
+            mailer,
             start_mode,
             shutdown,
         }
@@ -105,6 +110,20 @@ pub trait Hooks: Sized {
     async fn connect_workers(ctx: &Context) -> Result<()>;
 
     fn register_tasks(tasks: &mut Tasks);
+
+    fn middlewares(ctx: &Context) -> Vec<Box<dyn MiddlewareLayer>> {
+        default_middleware_stack(ctx)
+    }
+
+    async fn before_routes(_ctx: &Context) -> Result<Router<Context>> {
+        Ok(Router::new())
+    }
+
+    async fn after_routes(router: Router<Context>, _ctx: &Context) -> Result<Router<Context>> {
+        Ok(router)
+    }
+
+    async fn on_shutdown(_ctx: &Context) {}
 
     async fn initializers(ctx: &Context) -> Result<Vec<Box<dyn Initializer>>>;
 
