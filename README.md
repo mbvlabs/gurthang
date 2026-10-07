@@ -37,7 +37,9 @@ gurthang build
 The generated app is MVC (`models`, `controllers`, `services`, `workers`) plus an
 Andurel-style `routes/` catalog. Route constants hold a name and path; HTTP
 methods are declared when `mount!` binds a controller method. Apps depend on the
-`gurthang` prelude crate. Controllers never own SQL.
+`gurthang` prelude crate. Controllers may hold `PgPool` and call model functions;
+they must not embed `query!`. Application logic lives in `services/`. See
+[`docs/adr/framework-shape.md`](docs/adr/framework-shape.md).
 
 `query!` / `query_as!` live in a separate `models` crate so a controller edit
 does not rebuild database macros. Generate and sync refresh offline SQLx data

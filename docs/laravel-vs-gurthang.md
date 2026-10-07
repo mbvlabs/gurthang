@@ -161,9 +161,10 @@ on_shutdown`. This is the closest analog to Laravel service providers.
 Gurthang is **schema-first**: `gurthang generate model Widget` introspects the
 live Postgres database (via `information_schema`) and emits a typed struct, a
 `CreateWidgetData` / `UpdateWidgetData`, CRUD methods using compile-checked
-`sqlx::query_as!`, a wrapper module, and a factory. There is no ORM; "models
-never own SQL" only in the sense that controllers never do — the `models` crate
-does, and it is isolated so a controller edit does not recompile SQL macros.
+`sqlx::query_as!`, a wrapper module, and a factory. There is no ORM. The
+`models` crate owns `query!`; controllers may call model functions with a
+pool but must not embed SQL. That crate split is so a controller edit does
+not recompile SQL macros. See [`docs/adr/framework-shape.md`](adr/framework-shape.md).
 
 **Agent-relevant**: SQL is validated at compile time against `.sqlx` offline
 metadata, so an agent's query mistakes surface as compiler errors, not runtime

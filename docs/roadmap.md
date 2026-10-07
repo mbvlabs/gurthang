@@ -35,49 +35,42 @@ modelling). Used for T2 and T15.
 - **T6 (Notifications) merged into T5.** Yes — notifications share the dispatch
   and registration model with events/listeners/observers, so they are one topic.
 - **T9 (Scheduler) folded into T5.** Yes — scheduled tasks are the time-triggered
-  facet of the same "what runs when" registry; they reuse `Task` and the T5
-  registration model.
+  facet of the same "what runs when" list; they reuse `Task` and `register_*` on
+  `Hooks`. Schedule is **Rust + worker clock**, not `scheduler.yaml`.
 - **T4 (Authorization) merged into T3.**
 - **T11 (File storage)** — not important currently; parked (see T11).
 - **T16 (Search)** — not planned (see T16).
-- **T19 → T0**, promoted to the first priority and broadened (see T0).
+- **T19 → T0**, promoted to first priority and completed as a design lock
+  ([`docs/adr/framework-shape.md`](adr/framework-shape.md)).
 
 ---
 
-## T0 — Framework layout & design study: `rwf` + "Laravel in Rust" (P0, FIRST)
+## T0 — Framework layout & design study: `rwf` + "Laravel in Rust" (P0, DONE)
 
-**Status:** new, and the top priority. Review notes: "for phase one, I'd also
-like to explore https://github.com/levkk/rwf ... to see if there are any
-design/architectural choices to steal here" and "push this up as the first
-priority along with what Laravel would look like in Rust from a
-layout/design perspective."
+**Status:** done (design lock). Accepted ADR:
+[`docs/adr/framework-shape.md`](adr/framework-shape.md). Boot order:
+[`docs/lifecycle.md`](lifecycle.md). No generated-app reshuffle in T0;
+template and generator changes land when T1/T2/T5/T14 touch those files.
 
-**Why.** Before committing to the middleware shape (T1), the registration model
-(T5), the queue decision (T8), and the Hooks shape (T14), settle the *layout and
-architecture*. Two inputs: prior art (`rwf`) and a first-principles sketch of
-what Laravel's layout would look like if it were written in Rust today.
+**Why.** Settle layout and architecture before T1 (middleware), T5
+(registration), T8 (queue), and T14 (Hooks). Inputs: Laravel workflow, Loco
+folders, Rwf attach/worker clock, Andurel `register_*` wiring, Pavex
+middleware kinds.
 
-**Scope.**
-- **`rwf` survey:** study its app boot/registration, routing, middleware,
-  database layer, background jobs, and CLI. Produce concrete
-  "steal / avoid / adapt" notes.
-- **"Laravel in Rust" layout study:** sketch the directory/module layout, the
-  app-definition API, and the extension points a Laravel-shaped Rust framework
-  should have, and compare against Gurthang's current `models` / `src` /
-  `routes` / `controllers` / `services` / `workers` / `tasks` / `mailers` /
-  `initializers` split. Decide what to keep, rename, or add.
-- Deliverable: `docs/adr/framework-shape.md` with a recommended layout, a
-  recommended app-definition/registration API, and explicit recommendations for
-  T1, T5, T8, T14.
-- Explicitly weigh each choice against the agent-optimized goal (declarative,
-  introspectable, compile-checked).
+**Locked.**
+- Keep the current generated tree (`models/`, `src/{app,controllers,routes,services,workers,tasks,mailers,initializers}`). No `providers/`, no Laravel PHP paths, no `workers/` → `jobs/` rename.
+- Apps depend on the `gurthang` facade; primitives stay in `gurthang-http`, `gurthang-inertia`, `gurthang-jobs`.
+- App-definition API: more `register_*` **Hooks methods in `src/app.rs`** (Andurel/fx shape, no DI container, no `AppRegistry` bag).
+- Middleware: Pavex `Wrap`/`Post`/`Pre`; membership in `Hooks::middlewares`; YAML holds **values**, not `enable:`.
+- Scheduler: `register_schedule` in Rust + worker clock. No `scheduler.yaml`.
+- Queue: stay app-owned Postgres; extract `JobBackend`; keep `enqueue_in`.
+- MVC: controllers may call models with `PgPool`; they must not embed `query!`. Services hold application logic.
 
 **Depends on.** Nothing. Feeds T1, T5, T8, T14.
 
-**Acceptance.** The ADR exists with a clear layout recommendation and a
-per-topic recommendation; the team agrees on the app-definition API direction.
+**Acceptance.** ADR accepted; lifecycle documented; per-topic locks written into T1/T5/T8/T14 below.
 
-**Agentic angle.** A deliberate layout and a single registration API is what
+**Agentic angle.** A deliberate layout and `register_*` in `app.rs` is what
 lets an agent place new code correctly and extend the framework without
 guessing.
 
@@ -85,14 +78,22 @@ guessing.
 
 ## T1 — Middleware v2: kinds + route/group registration (P0)
 
-**Status:** in progress on `feat/pavex-middleware` (PR #2).
+**Status:** in progress on `feat/pavex-middleware` (PR #2). T0 locks the
+kinds and control plane; T1 still adds route/group attach and `--routes`.
 
 **Why.** PR #2 already reworks middleware into Pavex-style `pre` / `post` /
 `wrap` kinds with a fixed `wrap -> post -> pre -> handler` composition, adds
 telemetry, rate limiting, `authn::RequireAuth`, and `authz::RequireAuthz`, and
 moves `session_auth` out of the initializer into `Hooks::middlewares`. The
-review note asks for one more thing: **a way to attach middleware to a route or
-group, not only controller-wide.**
+remaining work is **attach middleware to a route or group**, not only the
+global stack.
+
+**Locked (T0).** Keep PR #2 `MiddlewareKind` + `MiddlewareStack`. Stack
+membership lives in `Hooks::middlewares` (Rust). YAML holds values (timeouts,
+CORS, public paths), not `enable: true/false`. Reuse `MiddlewareLayer` for
+group/route scope — no second trait. Attach by wrapping a **sub-router once**
+in `controllers/*/routes()`, then merge; global `apply_stack` once after merge.
+`gurthang middleware --routes` prints names + kinds + scope.
 
 **Current state.** `mount!` builds a `Router` per controller; the stack is
 applied globally in `boot.rs::apply_stack`. There is no per-route/per-group
@@ -103,13 +104,13 @@ middleware concept.
   (`router.route_with(mw, ...)` or a `group!`/`middleware(...)` wrapper) that
   layers a `MiddlewareStack` subset onto a sub-router before it is merged into
   `AppRoutes`. Keep the global stack as the default.
-- Decide whether route middleware are named kinds (reuse `MiddlewareLayer`) or a
-  separate, lighter per-route type. Prefer reusing kinds for one mental model.
-- Expose the effective per-route stack in `gurthang middleware` (e.g. a
-  `--routes` view) so an agent can introspect which middleware runs where.
-- `generate controller` should be able to scaffold a controller whose `routes()`
-  applies a group middleware (e.g. `RequireAuth` for an admin resource).
-- Reconcile with T0's layout/registration recommendation.
+- Reuse Pavex kinds / `MiddlewareLayer` for route and group scope (T0 lock).
+- Expose the effective per-route stack in `gurthang middleware --routes`.
+- `generate controller` should scaffold a controller whose `routes()` applies
+  a group middleware (e.g. `RequireAuth` for an admin resource).
+- Move membership off YAML `enable` into `Hooks::middlewares` (even if PR #2
+  still reads `enable` today). Implement
+  [`docs/adr/framework-shape.md`](adr/framework-shape.md) § Middleware.
 
 **Compile-time note (raised in review).** Does `mount!` cost compile time? Today
 it expands to `Router::new().route(path, axum::routing::<verb>(on(ctrl, method)))`,
@@ -117,18 +118,17 @@ and `on` builds a `ControllerMethod<C, F>` that implements axum's `Handler` for
 0–8 extractor args via `impl_controller_method!`. Each controller method is a
 distinct monomorphized handler type, so compile time scales with the number of
 handlers, not with `mount!` itself; `mount!` is a thin loop. The real risk is
-per-route middleware *wrappers* multiplying monomorphized layer types. Before
-and after T1, measure with `cargo build --timings` (and `cargo build -Z
-time-passes` on nightly) on the template app, and prefer wrapping a **group**
-router once over wrapping each route, to bound type growth. Record the numbers
-in the PR so this stays a measured concern rather than a guess.
+per-route middleware *wrappers* multiplying monomorphized layer types. T0
+locks wrapping a **group** router once over wrapping each route. Before and
+after T1, measure with `cargo build --timings` (and `cargo build -Z
+time-passes` on nightly) on the template app. Record the numbers in the PR.
 
 **Files/areas.** `crates/gurthang-http/src/route.rs` (`mount!`, `Router` ext),
 `crates/gurthang/src/controller/middleware/mod.rs`, `crates/gurthang/src/boot.rs`,
 `crates/gurthang-generate/src/controller.rs` + `templates/controller.rs`,
 `crates/gurthang-new/templates/src/controllers/*`.
 
-**Depends on.** PR #2 landing; T0 for the layout decision.
+**Depends on.** PR #2 landing. T0 is done.
 
 **Acceptance.** A generated controller can attach a middleware to one route and
 another to the whole controller; `gurthang middleware --routes` shows the
@@ -178,12 +178,14 @@ live schema. No reusable validator, no `generate request`.
   automatically (one helper, e.g. `invalid(...)` generalized).
 - Add `gurthang generate request <Name>` producing a typed request struct with a
   `parse` fn and a stub rule set; wire it so controllers can extract it.
+  Generated types live in `src/http/requests/` (T0 reserved layout).
 - Keep it dependency-light; do not adopt a heavy validation crate unless it
   preserves the typed-boundary property.
 
 **Files/areas.** new `crates/gurthang-validate/` (or `gurthang::validation`),
 `crates/gurthang-generate/src/{model.rs,request.rs,templates/*}`,
-`crates/gurthang-new/templates/{models,src/controllers}/*`, `docs/validation.md`.
+`crates/gurthang-new/templates/{models,src/controllers,src/http/requests}/*`,
+`docs/validation.md`.
 
 **Depends on.** Nothing (T1 optional for auth-route demo).
 
@@ -267,37 +269,35 @@ dispatch story. Decouples side effects from request handling the Laravel way.
   existing `Mailer`), `Database` (a `notifications` table + Inertia shared
   `notifications` prop), and later `Slack`/webhook channels; a `Notifiable` trait
   on `User`; `generate notification <Name>`; an in-app bell/list in the template.
-- **Scheduler (former T9):** a cron-like schedule definition executed by a
-  `gurthang schedule` command or the worker; each entry dispatches a `Task` or a
-  job; reuse the `Task` trait.
-- Generators: `generate event|listener|observer|notification <Name>`, wired into
-  `app.rs` deterministically.
+- **Scheduler (former T9):** `register_schedule` on `Hooks` in `src/app.rs`.
+  The worker process hosts the clock (Rwf). `gurthang schedule` / `--list` for
+  agents. Each entry dispatches a `Task` or a job. **No `config/scheduler.yaml`.**
+- Generators: `generate event|listener|observer|notification <Name>`, patching
+  the matching `register_*` method in `src/app.rs` (same insertion style as
+  today's `Hooks::routes` / `register_tasks` patches).
 - Document ordering/at-least-once semantics and how an event fans out to
   listeners + queued jobs.
-- **Design evaluation (raised in review): the `register` function pattern.**
-  Today registration is scattered free functions called from `app.rs`:
-  `workers::x::register(ctx)`, `tasks.register(...)`, and (new) listener/observer/
-  notification registration. Before adding more, evaluate a single coherent
-  registration model (a `Registry`/`AppBuilder` passed through `Hooks`, or a
-  declarative list) so events, listeners, observers, notifications, workers,
-  tasks, policies, and scheduled tasks all register the same way. This is the
-  registration API T0 should have recommended. Write the decision in
-  `docs/adr/registration.md`.
+- **Registration (locked by T0):** more `register_*` methods on `impl Hooks
+  for App` in `src/app.rs`. The trait method *is* the list. Do not add an
+  `AppRegistry` / `AppBuilder` bag, a `providers/` directory, or
+  `docs/adr/registration.md` as a second design. Empty `workers::x::register`
+  stubs go away; listing the type on `register_workers` is enough. Rename
+  `Hooks::routes` → `register_routes` when this topic (or T14) touches `app.rs`.
 
 **Files/areas.** new `crates/gurthang-events/` (and
 `crates/gurthang-notifications/`), `crates/gurthang-generate/src/
 {event.rs,listener.rs,observer.rs,notification.rs}` + templates,
-`crates/gurthang/src/app.rs` (`Hooks`), model template emit points,
-`docs/adr/registration.md`.
+`crates/gurthang/src/app.rs` (`Hooks`), template `src/app.rs`, model template
+emit points, worker clock in `gurthang-jobs`.
 
-**Depends on.** T8 (for queued listeners/delivery), T7 (mail channel), T0
-(registration API).
+**Depends on.** T8 (for queued listeners/delivery), T7 (mail channel). T0 is
+done.
 
 **Acceptance.** Dispatching an event runs its listeners; a model create fires an
 observer; a notification writes a DB row and/or enqueues mail; a scheduled task
-fires on its cadence and can be listed; generators wire everything; tests cover
-fan-out; the registration model is documented and used by at least two
-subsystems.
+fires on its cadence via the worker clock and can be listed; generators patch
+`register_*` in `app.rs`; tests cover fan-out; at least two subsystems use the
+same `register_*` shape.
 
 **Agentic angle.** One registry for "what runs when" turns every side effect into
 a registered, greppable unit an agent can add without touching the original code
@@ -332,36 +332,34 @@ the same way it styles pages.
 
 ---
 
-## T8 — Queue/jobs: choose the backend (P0 for T5)
+## T8 — Queue/jobs: `JobBackend` on the Postgres queue (P0 for T5)
 
 **Status:** app-owned Postgres queue exists (`background_jobs`,
-`FOR UPDATE SKIP LOCKED`, leases, retries, backoff, LISTEN/NOTIFY). Review note:
-"I'm still debating the queue/job situation. I'd like an external crate to handle
-this but haven't found a good candidate ... Fang looks good but would require
-multiple db connection pools."
+`FOR UPDATE SKIP LOCKED`, leases, retries, backoff, LISTEN/NOTIFY). T0 locks
+this as the path; T8 still extracts a swappable backend and the inspector.
 
-**Why.** Decide the long-term queue strategy so T5 builds on the right
-foundation.
+**Why.** T5 queued listeners need a stable enqueue API. Fang/apalis stay
+possible later behind a trait; they are not the v1 rewrite.
 
 **Scope.**
-- **Decision record** (`docs/adr/queue.md`): app-owned vs external (evaluate
-  Fang, apalis, etc.). The known blocker with Fang is a second DB pool; weigh
-  that against maintenance cost and feature gap (batches, chains, dashboards).
-- If staying app-owned: extract a `JobBackend` trait so the storage engine is
-  swappable, add **batches** and **chains**, a failed-job inspector
-  (`gurthang jobs`), and job middleware (rate limit / uniqueness).
-- If adopting an external crate: define the adapter boundary and how the
-  business-change + enqueue transaction stays atomic (the current
-  `enqueue_in(&mut PgConnection, ...)` property must not regress).
+- **Decision record** (`docs/adr/queue.md`): record the T0 lock (app-owned
+  Postgres) and the Fang second-pool evaluation so the fork is closed, not
+  reopened.
+- Extract a `JobBackend` trait so storage can change without rewriting
+  callers.
+- Preserve `enqueue_in(&mut PgConnection, …)` (business write + enqueue in
+  one transaction).
+- Add **`gurthang jobs`**, then batches, chains, and job middleware (rate
+  limit / uniqueness).
 
 **Files/areas.** `crates/gurthang-jobs/*`, `crates/gurthang-cli` (`jobs`
 command), `docs/adr/queue.md`.
 
 **Depends on.** Nothing; unblocks T5.
 
-**Acceptance.** The decision is written; whichever path, transactional enqueue
-and lease semantics are preserved and tested; `gurthang jobs` reports queue
-state.
+**Acceptance.** `docs/adr/queue.md` records the Postgres lock; `JobBackend` is
+extracted; transactional enqueue and leases are preserved and tested;
+`gurthang jobs` reports queue state.
 
 **Agentic angle.** A `gurthang jobs` inspector plus stable semantics let an
 agent debug async work through a command, not a debugger.
@@ -441,25 +439,32 @@ plaintext-cookie mistake.
 
 ## T14 — Rework the Hooks lifecycle (P3, pushed back)
 
-**Status:** review note: "let's push this back so I can focus on this later."
-Also: "This was taken from Loco RS — I'm not entirely sure I love the hooks
-design but mainly because I don't fully understand it."
+**Status:** design locked by T0; code deferred. Current vs target is in
+[`docs/lifecycle.md`](lifecycle.md). Review note: "let's push this back so I
+can focus on this later" / Loco-shaped Hooks.
 
-**Why.** The `Hooks` trait (`boot/routes/connect_workers/register_tasks/
-middlewares/before_routes/after_routes/on_shutdown/initializers/export_payloads`)
-is powerful but under-documented and partly Loco-shaped.
+**Why.** `Hooks` today mixes catalogs (`routes`, `export_payloads`) with
+lifecycle (`before_routes`, two `after_routes`). T0 keeps Hooks and adds
+`register_*`; T14 applies that in code.
 
-**Scope (deferred).** When picked up: write the lifecycle down
-(`docs/lifecycle.md`) with exact order and worked examples; consider collapsing
-`before_routes`/`after_routes` + `initializers` into a smaller, well-named set;
-decide whether `export_payloads` belongs on `Hooks`. This is now largely decided
-by T0 (layout/app-definition API) and T5 (registration model), so it becomes
-"apply the T0 decision," not a fresh design.
+**Scope (deferred; apply T0, do not redesign).**
+- Keep [`docs/lifecycle.md`](lifecycle.md) in sync with `boot.rs`.
+- Default `boot` to `create_app::<Self>`.
+- Collapse `before_routes` / `Hooks::after_routes` / `Initializer::after_routes`
+  to **one** post-merge router hook (template asset mount).
+- Initializers mutate `Context` only (view engine). Session/auth is
+  `Hooks::middlewares` (T1/PR #2).
+- Move `export_payloads` off `Hooks` (`gurthang sync payloads` / export bin).
+- Rename `routes` → `register_routes` and `connect_workers` →
+  `register_workers` if T5 has not already. Keep the `register_*` family;
+  do not add more Loco lifecycle hooks.
 
-**Depends on.** T0, T5.
+**Depends on.** T0 (done). Can land before or after T5; T5 adds more
+`register_*` slots on the same trait.
 
-**Acceptance (when done).** `docs/lifecycle.md` exists with a diagram; the
-template uses the settled API; no behavior regressions.
+**Acceptance (when done).** Template uses the target API in
+[`docs/lifecycle.md`](lifecycle.md); `export_payloads` is not on `Hooks`;
+one post-merge router hook; no behavior regressions.
 
 **Agentic angle.** An explicit, documented lifecycle is what an agent needs to
 extend an app correctly on the first try.
@@ -564,16 +569,16 @@ Dependency-ordered path (parallelizable where noted):
 
 ```
 Phase 1 (foundations)
-  T0  Framework layout & design study (rwf + Laravel-in-Rust)   [FIRST]
+  T0  Framework layout & design study                          [DONE — adr/framework-shape.md]
   T1  Middleware kinds + route/group registration               [PR #2 in flight]
   T2  Type-driven validation + models rework                    [Palmieri]
   T18 Agent-facing DX (continuous, start early)
-  T8  Queue backend decision (ADR; unblocks T5)
+  T8  JobBackend on Postgres queue (unblocks T5)
 
 Phase 2 (access + side effects)
   T3  Auth + authorization completeness (merged T3+T4)
   T5  Dispatch: events / listeners / observers / notifications / scheduler
-      (merged T5+T6+T9; includes registration-model decision)
+      (merged T5+T6+T9; implement register_* + worker clock)
 
 Phase 3 (conveniences)
   T13 Cookie encryption + signed URLs
@@ -584,13 +589,13 @@ Phase 3 (conveniences)
 
 Phase 4 (breadth / later)
   T7  Mail hardening (Tailwind emails)
-  T14 Hooks lifecycle rework                        [pushed back; apply T0/T5]
+  T14 Hooks lifecycle rework                        [apply T0 ADR + lifecycle.md]
   T11 File storage                                  [parked]
   T16 Search                                        [not planned]
 ```
 
-**Highest leverage first:** T0, T1, T2, T8, T18 — they shrink every later topic
-and directly serve the agent-optimization goal.
+**Highest leverage first:** T1, T2, T8, T18 — T0 is done and they shrink every
+later topic.
 
 ---
 
@@ -605,5 +610,7 @@ and directly serve the agent-optimization goal.
    runtime validation.
 5. **Document the mental model** (`docs/*.md`) with a worked example.
 6. **Test the happy path and the redirect/error path.**
-7. **Record decisions** in `docs/adr/` when a fork is taken (framework shape,
-   registration model, queue backend).
+7. **Record decisions** in `docs/adr/` when a fork is taken. Framework shape
+   and registration (`register_*` on Hooks) are locked in
+   [`docs/adr/framework-shape.md`](adr/framework-shape.md). Queue backend
+   still writes [`docs/adr/queue.md`](adr/queue.md) in T8.
