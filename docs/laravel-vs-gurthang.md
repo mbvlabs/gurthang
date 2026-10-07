@@ -70,8 +70,8 @@ SQL). The report closes with concrete opportunities to push further.
 Gurthang also has **commands Laravel does not**: `gurthang sync model|routes|payloads|factory|factories [--check]`
 (regenerate artifacts from the live schema and detect drift) and
 `gurthang tools [check|sync]` (verify/install the toolchain: `clang`, `mold`,
-`sqlx-cli`, Node, `psql`). `gurthang middleware` prints the YAML middleware
-stack with enable flags.
+`sqlx-cli`, Node, `psql`). `gurthang middleware` prints the Rust default stack (kind + name;
+`--routes` adds scope).
 
 **Notes**
 - Gurthang generation is **non-interactive and deterministic**; the only prompt

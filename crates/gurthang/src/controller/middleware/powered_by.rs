@@ -4,7 +4,11 @@ use axum::{
 };
 use tower_http::set_header::SetResponseHeaderLayer;
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 pub struct PoweredBy {
     ident: Option<HeaderValue>,
@@ -26,6 +30,10 @@ impl MiddlewareLayer for PoweredBy {
         "powered_by"
     }
 
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Post
+    }
+
     fn is_enabled(&self) -> bool {
         self.ident.is_some()
     }
@@ -38,10 +46,9 @@ impl MiddlewareLayer for PoweredBy {
     }
 
     fn apply(&self, app: Router<Context>) -> Result<Router<Context>> {
-        let ident = self
-            .ident
-            .clone()
-            .unwrap_or_else(|| HeaderValue::from_static("gurthang"));
+        let Some(ident) = self.ident.clone() else {
+            return Ok(app);
+        };
         Ok(app.layer(SetResponseHeaderLayer::overriding(
             HeaderName::from_static("x-powered-by"),
             ident,

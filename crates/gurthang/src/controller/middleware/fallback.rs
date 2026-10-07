@@ -3,7 +3,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::json;
 use tower_http::services::ServeFile;
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Fallback {
@@ -55,6 +59,10 @@ where
 impl MiddlewareLayer for Fallback {
     fn name(&self) -> &'static str {
         "fallback"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Wrap
     }
 
     fn is_enabled(&self) -> bool {

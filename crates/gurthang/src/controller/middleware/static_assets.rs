@@ -7,7 +7,7 @@ use tower_http::services::ServeDir;
 
 use crate::{
     app::Context,
-    controller::middleware::MiddlewareLayer,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
     error::{Error, Result},
 };
 
@@ -49,6 +49,10 @@ fn default_folder() -> FolderConfig {
 impl MiddlewareLayer for StaticAssets {
     fn name(&self) -> &'static str {
         "static"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Wrap
     }
 
     fn is_enabled(&self) -> bool {

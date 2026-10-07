@@ -2,7 +2,11 @@ use axum::{Router, middleware};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Csrf {
@@ -25,6 +29,10 @@ fn default_true() -> bool {
 impl MiddlewareLayer for Csrf {
     fn name(&self) -> &'static str {
         "csrf"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Wrap
     }
 
     fn is_enabled(&self) -> bool {

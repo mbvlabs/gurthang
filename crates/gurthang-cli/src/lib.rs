@@ -19,7 +19,7 @@ pub fn run(cli: Cli, out: &mut impl Write) -> Result<()> {
         Command::Sync(args) => sync(args.command, out)?,
         Command::Routes => gurthang_generate::print_routes(out)?,
         Command::Task { name } => task(name.as_deref(), out)?,
-        Command::Middleware => middleware(out)?,
+        Command::Middleware { routes } => middleware(routes, out)?,
         Command::Db(args) => db(args.command, out)?,
         Command::Build => gurthang_build::execute(out)?,
         Command::Tools(args) => match args.command {
@@ -138,14 +138,19 @@ fn db(command: DbCommand, out: &mut impl Write) -> Result<()> {
 }
 
 fn task(name: Option<&str>, out: &mut impl Write) -> Result<()> {
-    run_app_command("task", name, out)
+    run_app_command("task", name, false, out)
 }
 
-fn middleware(out: &mut impl Write) -> Result<()> {
-    run_app_command("middleware", None, out)
+fn middleware(routes: bool, out: &mut impl Write) -> Result<()> {
+    run_app_command("middleware", None, routes, out)
 }
 
-fn run_app_command(subcommand: &str, name: Option<&str>, out: &mut impl Write) -> Result<()> {
+fn run_app_command(
+    subcommand: &str,
+    name: Option<&str>,
+    extra_flag: bool,
+    out: &mut impl Write,
+) -> Result<()> {
     let current = std::env::current_dir().map_err(|error| {
         Error::Message(format!("could not determine current directory: {error}"))
     })?;
@@ -163,6 +168,9 @@ fn run_app_command(subcommand: &str, name: Option<&str>, out: &mut impl Write) -
         command.arg(name);
     } else if subcommand == "task" {
         command.arg("--list");
+    }
+    if extra_flag {
+        command.arg("--routes");
     }
     let status = command
         .status()

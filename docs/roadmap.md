@@ -61,7 +61,7 @@ middleware kinds.
 - Keep the current generated tree (`models/`, `src/{app,controllers,routes,services,workers,tasks,mailers,initializers}`). No `providers/`, no Laravel PHP paths, no `workers/` → `jobs/` rename.
 - Apps depend on the `gurthang` facade; primitives stay in `gurthang-http`, `gurthang-inertia`, `gurthang-jobs`.
 - App-definition API: more `register_*` **Hooks methods in `src/app.rs`** (Andurel/fx shape, no DI container, no `AppRegistry` bag).
-- Middleware: Pavex `Wrap`/`Post`/`Pre`; membership in `Hooks::middlewares`; YAML holds **values**, not `enable:`.
+- Middleware: Pavex `Wrap`/`Post`/`Pre`; membership in `Hooks::middlewares`; YAML does not influence middleware.
 - Scheduler: `register_schedule` in Rust + worker clock. No `scheduler.yaml`.
 - Queue: stay app-owned Postgres; extract `JobBackend`; keep `enqueue_in`.
 - MVC: controllers may call models with `PgPool`; they must not embed `query!`. Services hold application logic.
@@ -78,39 +78,34 @@ guessing.
 
 ## T1 — Middleware v2: kinds + route/group registration (P0)
 
-**Status:** in progress on `feat/pavex-middleware` (PR #2). T0 locks the
-kinds and control plane; T1 still adds route/group attach and `--routes`.
+**Status:** in progress on `feat/pavex-middleware` (PR #2).
 
 **Why.** PR #2 already reworks middleware into Pavex-style `pre` / `post` /
 `wrap` kinds with a fixed `wrap -> post -> pre -> handler` composition, adds
 telemetry, rate limiting, `authn::RequireAuth`, and `authz::RequireAuthz`, and
-moves `session_auth` out of the initializer into `Hooks::middlewares`. The
-remaining work is **attach middleware to a route or group**, not only the
-global stack.
+moves `session_auth` out of the initializer into `Hooks::middlewares`. T1
+adds opt-in group attach and takes YAML out of middleware.
 
-**Locked (T0).** Keep PR #2 `MiddlewareKind` + `MiddlewareStack`. Stack
-membership lives in `Hooks::middlewares` (Rust). YAML holds values (timeouts,
-CORS, public paths), not `enable: true/false`. Reuse `MiddlewareLayer` for
-group/route scope — no second trait. Attach by wrapping a **sub-router once**
-in `controllers/*/routes()`, then merge; global `apply_stack` once after merge.
+**Locked (T0, amended).** Keep PR #2 `MiddlewareKind` + `MiddlewareStack`.
+Stack membership lives in `Hooks::middlewares` (Rust). YAML does not
+influence middleware. Reuse `MiddlewareLayer` for group scope — no second
+trait. Attach with `RouteGroup::add_mw(layer)` on a **sub-router once**,
+then merge; global `apply_stack` once after merge.
 `gurthang middleware --routes` prints names + kinds + scope.
 
-**Current state.** `mount!` builds a `Router` per controller; the stack is
-applied globally in `boot.rs::apply_stack`. There is no per-route/per-group
-middleware concept.
-
 **Scope.**
-- Add route- and group-level middleware attachment, e.g. a `Router` extension
-  (`router.route_with(mw, ...)` or a `group!`/`middleware(...)` wrapper) that
-  layers a `MiddlewareStack` subset onto a sub-router before it is merged into
-  `AppRoutes`. Keep the global stack as the default.
-- Reuse Pavex kinds / `MiddlewareLayer` for route and group scope (T0 lock).
-- Expose the effective per-route stack in `gurthang middleware --routes`.
-- `generate controller` should scaffold a controller whose `routes()` applies
-  a group middleware (e.g. `RequireAuth` for an admin resource).
-- Move membership off YAML `enable` into `Hooks::middlewares` (even if PR #2
-  still reads `enable` today). Implement
-  [`docs/adr/framework-shape.md`](adr/framework-shape.md) § Middleware.
+- `RouteGroup` / `BoundRoute` in `gurthang-http`; `RouteGroupExt::add_mw`
+  in `gurthang` (wraps a sub-router once). Apps call it from
+  `controllers/*/routes()` if they want. Not a `MiddlewareStack` in
+  `routes()`. `mount!` stays thin for unwrapped controllers.
+- The generated app keeps global `session_auth` `replace`. `RequireAuth`
+  wraps dashboard routes (`RouteGroup::add_mw`). No generator scaffold for
+  other resources (later topic).
+- Default stack is Rust-only. Drop YAML `server.middlewares` from
+  templates. `cors` / `compression` / `secure_headers` stay off until
+  `push`. Placeholders for `session_auth`, `authn`, `authz`.
+- `gurthang middleware` prints kind + name; `--routes` adds `scope`
+  (`global` for the default stack this PR). Do not boot Postgres.
 
 **Compile-time note (raised in review).** Does `mount!` cost compile time? Today
 it expands to `Router::new().route(path, axum::routing::<verb>(on(ctrl, method)))`,
@@ -123,18 +118,17 @@ locks wrapping a **group** router once over wrapping each route. Before and
 after T1, measure with `cargo build --timings` (and `cargo build -Z
 time-passes` on nightly) on the template app. Record the numbers in the PR.
 
-**Files/areas.** `crates/gurthang-http/src/route.rs` (`mount!`, `Router` ext),
-`crates/gurthang/src/controller/middleware/mod.rs`, `crates/gurthang/src/boot.rs`,
-`crates/gurthang-generate/src/controller.rs` + `templates/controller.rs`,
-`crates/gurthang-new/templates/src/controllers/*`.
+**Files/areas.** `crates/gurthang/src/controller/middleware/mod.rs`,
+`crates/gurthang/src/boot.rs`, template YAML + `src/app.rs`,
+`docs/middleware.md`.
 
-**Depends on.** PR #2 landing. T0 is done.
+**Depends on.** T0 is done.
 
-**Acceptance.** A generated controller can attach a middleware to one route and
-another to the whole controller; `gurthang middleware --routes` shows the
-composed per-route stacks; `cargo test --workspace` passes; the template app
-uses at least one group middleware end-to-end; compile-time impact is measured
-and reported.
+**Acceptance.** `RouteGroup::add_mw` is public and tested (grouped HTML 303
+/ JSON 401, unwrapped sibling 200); `gurthang middleware --routes` prints a
+`scope` column; `cargo test --workspace` passes; YAML does not influence
+the stack; compile-time impact is measured and reported. Generator group
+scaffolding is **out**.
 
 **Agentic angle.** Per-route introspection (`middleware --routes`) lets an agent
 see the real request lifecycle without reading source, and named kinds make

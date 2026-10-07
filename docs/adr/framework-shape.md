@@ -308,7 +308,6 @@ impl Hooks for App {
     fn middlewares(ctx: &Context) -> MiddlewareStack {
         default_middleware_stack(ctx)
             .replace("session_auth", SessionAuthLayer::from_ctx(ctx))
-            .replace("authn", RequireAuth::new(...))
     }
 
     fn initializers(ctx: &Context) -> Vec<Box<dyn Initializer>> {
@@ -376,11 +375,13 @@ Change relative to the PR and to master:
 
 - **Default stack is constructed in Rust.** `Hooks::middlewares` is the
   source of truth for what runs.
-- YAML may hold **values** (timeout ms, rate-limit numbers, CORS origins,
-  auth public paths). It must not be how you turn a layer on or off.
-- Group/route attach (T1) wraps a **sub-router once** in
-  `controllers/*/routes()`, then merges. Global stack applied once after
-  merge. `gurthang middleware --routes` prints names + kinds + scope.
+- YAML does **not** influence middleware (not membership, not values).
+  Timeouts, rate limits, public paths, and similar live in Rust defaults
+  or in `Hooks::middlewares` / `RouteGroup::add_mw` arguments. Leftover
+  `server.middlewares` in old YAML is ignored.
+- Group attach is `RouteGroup::add_mw(layer)` on a sub-router once, then
+  merge. Global stack applied once after merge.
+  `gurthang middleware --routes` prints names + kinds + scope.
 
 ---
 

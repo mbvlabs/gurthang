@@ -31,8 +31,12 @@ pub enum Command {
         /// Task name. Omit to list registered tasks.
         name: Option<String>,
     },
-    /// Print the YAML middleware stack with enable flags.
-    Middleware,
+    /// Print the composed middleware stack.
+    Middleware {
+        /// Print kind, name, and scope.
+        #[arg(long)]
+        routes: bool,
+    },
     /// Create, migrate, and seed the application database.
     Db(DbArgs),
     /// Build frontend assets and a release binary.

@@ -2,7 +2,11 @@ use axum::Router;
 use serde::{Deserialize, Serialize};
 use tower_http::compression::CompressionLayer;
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Compression {
@@ -13,6 +17,10 @@ pub struct Compression {
 impl MiddlewareLayer for Compression {
     fn name(&self) -> &'static str {
         "compression"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Post
     }
 
     fn is_enabled(&self) -> bool {

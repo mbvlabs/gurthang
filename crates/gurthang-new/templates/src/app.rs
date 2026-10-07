@@ -46,11 +46,22 @@ impl Hooks for App {
 
     fn register_tasks(_tasks: &mut Tasks) {}
 
+    fn middlewares(ctx: &Context) -> MiddlewareStack {
+        let mut stack = default_middleware_stack(ctx);
+        stack.replace(
+            "session_auth",
+            Box::new(session_auth::SessionAuthLayer::new(
+                crate::services::auth::AuthBackend::new(ctx.db.clone()),
+                ctx,
+            )),
+        );
+        stack
+    }
+
     async fn initializers(_ctx: &Context) -> Result<Vec<Box<dyn Initializer>>> {
-        Ok(vec![
-            Box::new(initializers::view_engine::ViewEngineInitializer),
-            Box::new(initializers::auth::AuthInitializer),
-        ])
+        Ok(vec![Box::new(
+            initializers::view_engine::ViewEngineInitializer,
+        )])
     }
 
     fn export_payloads() -> Result<()> {

@@ -3,7 +3,11 @@ use std::net::IpAddr;
 use axum::{Router, extract::Request, middleware::Next, response::Response};
 use serde::{Deserialize, Serialize};
 
-use crate::{app::Context, controller::middleware::MiddlewareLayer, error::Result};
+use crate::{
+    app::Context,
+    controller::middleware::{MiddlewareKind, MiddlewareLayer},
+    error::Result,
+};
 
 #[derive(Clone, Debug)]
 pub struct RemoteIp(pub Option<IpAddr>);
@@ -17,6 +21,10 @@ pub struct RemoteIpMiddleware {
 impl MiddlewareLayer for RemoteIpMiddleware {
     fn name(&self) -> &'static str {
         "remote_ip"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Pre
     }
 
     fn is_enabled(&self) -> bool {
