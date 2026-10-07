@@ -55,22 +55,6 @@ impl Hooks for App {
                 ctx,
             )),
         );
-        stack.replace(
-            "authn",
-            Box::new(authn::RequireAuth::<crate::services::auth::AuthBackend>::new(
-                authn::Config {
-                    enable: true,
-                    public_paths: vec![
-                        "/".into(),
-                        "/login".into(),
-                        "/register".into(),
-                        "/assets".into(),
-                    ],
-                    redirect: Some(crate::routes::auth::LOGIN.path.to_string()),
-                    status: 401,
-                },
-            )),
-        );
         stack
     }
 

@@ -40,10 +40,36 @@ pub struct RequireAuthz {
     authorizer: Option<Arc<dyn Authorizer>>,
 }
 
-pub fn new(config: &Option<Config>) -> RequireAuthz {
+pub fn new() -> RequireAuthz {
     RequireAuthz {
-        config: config.clone().unwrap_or_default(),
+        config: Config::default(),
         authorizer: None,
+    }
+}
+
+/// Placeholder so the default stack can list `authz` without denying every
+/// request. Replace with [`RequireAuthz`] plus an [`Authorizer`] to enforce.
+pub struct AuthzPlaceholder;
+
+pub fn placeholder() -> AuthzPlaceholder {
+    AuthzPlaceholder
+}
+
+impl MiddlewareLayer for AuthzPlaceholder {
+    fn name(&self) -> &'static str {
+        "authz"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Pre
+    }
+
+    fn config(&self) -> serde_json::Result<serde_json::Value> {
+        serde_json::to_value(Config::default())
+    }
+
+    fn apply(&self, app: Router<Context>) -> Result<Router<Context>> {
+        Ok(app)
     }
 }
 

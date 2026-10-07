@@ -94,7 +94,7 @@ pub async fn start<H: Hooks>() -> Result<()> {
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("task") => run_tasks::<H>(args.collect()).await,
-        Some("middleware") => print_middleware(),
+        Some("middleware") => print_middleware(args.collect()),
         other => {
             let config = Config::load()?;
             init_tracing(&config);
@@ -173,17 +173,24 @@ pub fn serve_dev_assets(router: Router<Context>) -> Router<Context> {
     router.nest_service("/assets", ServeDir::new("assets"))
 }
 
-fn print_middleware() -> Result<()> {
+fn print_middleware(args: Vec<String>) -> Result<()> {
+    let routes = args.iter().any(|arg| arg == "--routes");
     let environment = Environment::from_env();
     let path = std::path::Path::new("config").join(format!("{}.yaml", environment.as_str()));
     let yaml = fs::read_to_string(&path)
         .map_err(|error| Error::Config(format!("could not read {}: {error}", path.display())))?;
     let mut config = Config::from_yaml(&yaml)?;
-    config.environment = environment;
-    middleware::print_stack(
-        &middleware::stack_from_config(&config),
-        &mut std::io::stdout(),
-    )
+    config.environment = environment.clone();
+    let stack = middleware::default_stack(
+        environment,
+        config.session.secure,
+        config.server.ident.as_deref(),
+    );
+    if routes {
+        middleware::print_stack_routes(&[("global", &stack)], &mut std::io::stdout())
+    } else {
+        middleware::print_stack(&stack, &mut std::io::stdout())
+    }
 }
 
 async fn serve(boot: BootResult) -> Result<()> {

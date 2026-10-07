@@ -107,6 +107,77 @@ mod method_impls {
     impl_controller_method!([T1, T2, T3, T4, T5, T6, T7], T8);
 }
 
+/// A catalog [`Route`] bound to a verb and controller method.
+pub struct BoundRoute<S> {
+    apply: Box<dyn FnOnce(Router<S>) -> Router<S> + Send>,
+}
+
+/// A set of [`BoundRoute`]s that can take middleware once (one sub-router wrap).
+pub struct RouteGroup<S> {
+    router: Router<S>,
+}
+
+impl<S> RouteGroup<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    pub fn new() -> Self {
+        Self {
+            router: Router::new(),
+        }
+    }
+
+    pub fn from_router(router: Router<S>) -> Self {
+        Self { router }
+    }
+
+    pub fn add(mut self, bound: BoundRoute<S>) -> Self {
+        self.router = (bound.apply)(self.router);
+        self
+    }
+
+    pub fn into_router(self) -> Router<S> {
+        self.router
+    }
+}
+
+impl<S> Default for RouteGroup<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+macro_rules! bind_verb {
+    ($name:ident) => {
+        pub fn $name<C, F, T, S>(self, controller: C, handler: F) -> BoundRoute<S>
+        where
+            C: Clone + Send + Sync + 'static,
+            F: Clone + Send + Sync + 'static,
+            ControllerMethod<C, F>: Handler<T, S>,
+            T: 'static,
+            S: Clone + Send + Sync + 'static,
+        {
+            let path = self.path;
+            BoundRoute {
+                apply: Box::new(move |router: Router<S>| {
+                    router.route(path, axum::routing::$name(on(controller, handler)))
+                }),
+            }
+        }
+    };
+}
+
+impl Route {
+    bind_verb!(get);
+    bind_verb!(post);
+    bind_verb!(put);
+    bind_verb!(patch);
+    bind_verb!(delete);
+}
+
 #[macro_export]
 macro_rules! mount {
     ($app:ident, { $($route:expr => $verb:ident($ctrl:expr, $handler:expr)),+ $(,)? }) => {{
@@ -182,5 +253,28 @@ mod tests {
                 path: "/",
             } => get(app, Hello::show),
         });
+    }
+
+    #[test]
+    fn route_group_binds_controller_method() {
+        #[derive(Clone)]
+        struct Hello;
+
+        impl Hello {
+            async fn show(self) -> &'static str {
+                "ok"
+            }
+        }
+
+        let app = Hello;
+        let _router: Router = RouteGroup::new()
+            .add(
+                Route {
+                    name: "root",
+                    path: "/",
+                }
+                .get(app, Hello::show),
+            )
+            .into_router();
     }
 }

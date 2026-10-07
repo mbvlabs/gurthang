@@ -15,11 +15,13 @@ pub use app::{Context, Hooks, Initializer};
 pub use boot::{AppRoutes, BootResult, StartMode, create_app, serve_dev_assets, start};
 pub use config::{Config, Environment};
 pub use controller::middleware::{
-    MiddlewareKind, MiddlewareLayer, MiddlewareStack, authn, default_middleware_stack,
-    session_auth,
+    MiddlewareKind, MiddlewareLayer, MiddlewareStack, RouteGroupExt, authn,
+    default_middleware_stack, session_auth, wrap_router,
 };
 pub use error::{Error, Result};
-pub use gurthang_http::{AssetResolver, PostgresSessionStore, Route, mount, on, protect};
+pub use gurthang_http::{
+    AssetResolver, BoundRoute, PostgresSessionStore, Route, RouteGroup, mount, on, protect,
+};
 pub use gurthang_inertia::{
     InertiaRenderer, InertiaRequest, InertiaSsr, SsrOptions, mutation_redirect,
 };

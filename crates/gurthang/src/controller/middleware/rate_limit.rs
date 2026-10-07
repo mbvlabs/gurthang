@@ -23,8 +23,9 @@ use crate::{
 /// Configuration for the IP-based rate limiter.
 ///
 /// The limiter uses a fixed window per client IP. It defaults to enabled with a
-/// generous ceiling so the load-shedding battery is on out of the box; set
-/// `enable: false` (or raise the limit) in `config.server.middlewares.rate_limit`.
+/// generous ceiling so the load-shedding battery is on out of the box. Omit
+/// it from `Hooks::middlewares` (or `delete` it) to turn it off. The test
+/// default stack omits it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default = "default_true")]

@@ -13,8 +13,7 @@ use crate::{
     http::PostgresSessionStore,
 };
 
-/// Config for the session/auth middleware. Kept as `session_auth` in
-/// `config.server.middlewares`.
+/// Config leftover for old YAML. Membership is the Rust stack, not this file.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SessionAuth {
     #[serde(default = "default_true")]
@@ -42,7 +41,6 @@ pub struct SessionAuthLayer<B> {
     store: PostgresSessionStore,
     cookie: String,
     secure: bool,
-    enable: bool,
     marker: PhantomData<fn() -> B>,
 }
 
@@ -51,19 +49,11 @@ where
     B: AuthnBackend + Clone + Send + Sync + 'static,
 {
     pub fn new(backend: B, ctx: &Context) -> Self {
-        let config = ctx
-            .config
-            .server
-            .middlewares
-            .session_auth
-            .clone()
-            .unwrap_or_default();
         Self {
             backend,
             store: PostgresSessionStore::new(ctx.db.clone()),
             cookie: ctx.config.session.cookie.clone(),
             secure: ctx.config.session.secure,
-            enable: config.enable,
             marker: PhantomData,
         }
     }
@@ -84,14 +74,8 @@ where
         MiddlewareKind::Wrap
     }
 
-    fn is_enabled(&self) -> bool {
-        self.enable
-    }
-
     fn config(&self) -> serde_json::Result<serde_json::Value> {
-        serde_json::to_value(SessionAuth {
-            enable: self.enable,
-        })
+        serde_json::to_value(SessionAuth { enable: true })
     }
 
     fn apply(&self, router: Router<Context>) -> Result<Router<Context>> {
@@ -106,17 +90,12 @@ where
     }
 }
 
-/// Placeholder used by the framework default stack. It carries the enabled flag
-/// so `gurthang middleware` lists it, but installs nothing; the app swaps it for
-/// [`SessionAuthLayer`].
-pub struct SessionAuthPlaceholder {
-    enable: bool,
-}
+/// Placeholder used by the framework default stack. It installs nothing; the
+/// app swaps it for [`SessionAuthLayer`].
+pub struct SessionAuthPlaceholder;
 
-pub fn placeholder(config: &Option<SessionAuth>) -> SessionAuthPlaceholder {
-    SessionAuthPlaceholder {
-        enable: config.as_ref().map(|layer| layer.enable).unwrap_or(true),
-    }
+pub fn placeholder() -> SessionAuthPlaceholder {
+    SessionAuthPlaceholder
 }
 
 impl MiddlewareLayer for SessionAuthPlaceholder {
@@ -128,14 +107,8 @@ impl MiddlewareLayer for SessionAuthPlaceholder {
         MiddlewareKind::Wrap
     }
 
-    fn is_enabled(&self) -> bool {
-        self.enable
-    }
-
     fn config(&self) -> serde_json::Result<serde_json::Value> {
-        serde_json::to_value(SessionAuth {
-            enable: self.enable,
-        })
+        serde_json::to_value(SessionAuth { enable: true })
     }
 
     fn apply(&self, app: Router<Context>) -> Result<Router<Context>> {
@@ -152,9 +125,6 @@ where
     B::Error: std::error::Error + Send + Sync + 'static,
 {
     let layer = SessionAuthLayer::new(backend, ctx);
-    if !layer.enable {
-        return router;
-    }
     let session_layer = SessionManagerLayer::new(layer.store.clone())
         .with_name(layer.cookie.clone())
         .with_http_only(true)

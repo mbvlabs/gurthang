@@ -18,8 +18,8 @@ Generated `src/main.rs` calls `gurthang::start::<App>()`.
 2. First CLI argument:
    - `task` → `run_tasks` (`H::register_tasks`; `--list` prints names; a named
      task loads config, initializes tracing, then `create_app::<H>(StartMode::Web)`)
-   - `middleware` → `print_middleware` (reads `config/{environment}.yaml` and
-     prints that stack; **no `Hooks`**)
+   - `middleware` → `print_middleware` (Rust default stack; `--routes` adds a
+     `scope` column. **no `Hooks`**; does not boot Postgres)
    - otherwise → `Config::load`, tracing, `StartMode::parse` (that arg, or
      `All` if absent), `H::boot`, `serve`, `H::on_shutdown`
 
@@ -37,8 +37,7 @@ Template `App::boot` always calls `create_app::<Self>`.
    - merge `H::routes().collect()`
    - `apply_stack(H::middlewares)`
    - `H::after_routes` (template: `assets::mount`)
-   - each `Initializer::after_routes` (template: `AuthInitializer` applies
-     `session_auth::layer`)
+   - each `Initializer::after_routes` (template: view engine does not override)
    - `with_state`
 5. If `mode.includes_worker()`: `H::connect_workers`
    (template: skip the worker loop on `Web`; otherwise `JobWorker::run` for
@@ -70,7 +69,7 @@ flowchart TD
   dotenv[dotenv]
   arg{first CLI arg}
   tasks[run_tasks]
-  yaml[print_middleware YAML only]
+  yaml[print_middleware Rust default stack]
   load["Config::load, tracing, StartMode::parse"]
   boot["H::boot = create_app"]
   ctx["PgPool, JobQueue, EmailSender, placeholder InertiaRenderer, Context::new"]
@@ -108,8 +107,8 @@ Locked in the [ADR](adr/framework-shape.md). Not implemented yet.
 - Collapse `before_routes`, `Hooks::after_routes`, and `Initializer::after_routes`
   to **one** post-merge router hook
 - `initializers` mutate `Context` only
-- Session/auth live in `Hooks::middlewares` (Pavex kinds; YAML holds values, not
-  `enable`)
+- Session/auth live in `Hooks::middlewares` (Pavex kinds; YAML does not
+  influence middleware)
 - `export_payloads` leaves `Hooks` (`gurthang sync payloads` / the export bin)
 - More `register_*` methods on `impl Hooks for App` in `src/app.rs`
   (`register_tasks` already; later schedule, events, policies)

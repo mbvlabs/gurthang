@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use axum::{
     Router,
     extract::Request,
-    http::StatusCode,
+    http::{StatusCode, header::ACCEPT},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -16,66 +16,33 @@ use crate::{
     error::Result,
 };
 
-/// Configuration for the authentication pre middleware.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+/// Leftover YAML. Runtime membership and values do not read this.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default)]
     pub enable: bool,
-    /// Paths that bypass the authentication check. Exact match, plus prefix
-    /// match for any entry other than `/`.
-    #[serde(default = "default_public_paths")]
+    #[serde(default)]
     pub public_paths: Vec<String>,
-    /// Where unauthenticated requests are redirected. When `None`, the request
-    /// is rejected with `status` instead.
     #[serde(default)]
     pub redirect: Option<String>,
-    #[serde(default = "default_status")]
+    #[serde(default)]
     pub status: u16,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            enable: false,
-            public_paths: default_public_paths(),
-            redirect: None,
-            status: default_status(),
-        }
-    }
-}
-
-fn default_public_paths() -> Vec<String> {
-    vec!["/".into(), "/login".into(), "/register".into(), "/assets".into()]
-}
-
-fn default_status() -> u16 {
-    401
-}
-
-impl Config {
-    pub fn is_public(&self, path: &str) -> bool {
-        self.public_paths.iter().any(|prefix| {
-            if prefix == "/" {
-                path == "/"
-            } else {
-                path == prefix || path.starts_with(&format!("{prefix}/"))
-            }
-        })
-    }
-}
-
-/// Pre-processing middleware that rejects unauthenticated requests before the
-/// handler runs. Requires an `AuthSession<B>` (installed by the `session_auth`
-/// wrap) to be present.
+/// Pre-processing middleware: the request must be logged in.
+///
+/// Attach it with [`RouteGroupExt::add_mw`](crate::RouteGroupExt::add_mw) to
+/// the routes that need a user. Inertia and HTML requests redirect to
+/// `redirect`; other clients get 401.
 pub struct RequireAuth<B> {
-    config: Config,
+    redirect: String,
     marker: PhantomData<fn() -> B>,
 }
 
 impl<B> RequireAuth<B> {
-    pub fn new(config: Config) -> Self {
+    pub fn new(redirect: impl Into<String>) -> Self {
         Self {
-            config,
+            redirect: redirect.into(),
             marker: PhantomData,
         }
     }
@@ -93,27 +60,23 @@ where
         MiddlewareKind::Pre
     }
 
-    fn is_enabled(&self) -> bool {
-        self.config.enable
-    }
-
     fn config(&self) -> serde_json::Result<serde_json::Value> {
-        serde_json::to_value(&self.config)
+        Ok(serde_json::json!({ "redirect": self.redirect }))
     }
 
     fn apply(&self, app: Router<Context>) -> Result<Router<Context>> {
-        let config = self.config.clone();
+        let redirect = self.redirect.clone();
         Ok(app.layer(axum::middleware::from_fn(
             move |auth: AuthSession<B>, request: Request, next: Next| {
-                let config = config.clone();
-                async move { require_auth(config, auth, request, next).await }
+                let redirect = redirect.clone();
+                async move { require_auth(redirect, auth, request, next).await }
             },
         )))
     }
 }
 
 async fn require_auth<B>(
-    config: Config,
+    redirect: String,
     auth: AuthSession<B>,
     request: Request,
     next: Next,
@@ -121,29 +84,46 @@ async fn require_auth<B>(
 where
     B: AuthnBackend + Clone + Send + Sync + 'static,
 {
-    if auth.user.is_some() || config.is_public(request.uri().path()) {
+    if auth.user.is_some() {
         return next.run(request).await;
     }
 
-    match config.redirect.as_deref() {
-        Some(location) => gurthang_inertia::mutation_redirect(location)
-            .unwrap_or_else(|_| StatusCode::UNAUTHORIZED.into_response()),
-        None => StatusCode::from_u16(config.status)
-            .unwrap_or(StatusCode::UNAUTHORIZED)
-            .into_response(),
+    if wants_redirect(request.headers()) {
+        return gurthang_inertia::mutation_redirect(redirect)
+            .unwrap_or_else(|_| StatusCode::UNAUTHORIZED.into_response());
     }
+
+    StatusCode::UNAUTHORIZED.into_response()
+}
+
+fn wants_redirect(headers: &axum::http::HeaderMap) -> bool {
+    if headers
+        .get("x-inertia")
+        .and_then(|value| value.to_str().ok())
+        == Some("true")
+    {
+        return true;
+    }
+    headers
+        .get(ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|accept| {
+            accept.split(',').any(|part| {
+                matches!(
+                    part.trim().split(';').next().unwrap_or("").trim(),
+                    "text/html" | "application/xhtml+xml"
+                )
+            })
+        })
 }
 
 /// Placeholder used by the framework default stack. The application replaces it
-/// with [`RequireAuth`] because the framework cannot know the auth backend type.
-pub struct AuthnPlaceholder {
-    enable: bool,
-}
+/// or attaches [`RequireAuth`] on a sub-router; the framework cannot know the
+/// auth backend type.
+pub struct AuthnPlaceholder;
 
-pub fn placeholder(config: &Option<Config>) -> AuthnPlaceholder {
-    AuthnPlaceholder {
-        enable: config.as_ref().map(|config| config.enable).unwrap_or(false),
-    }
+pub fn placeholder() -> AuthnPlaceholder {
+    AuthnPlaceholder
 }
 
 impl MiddlewareLayer for AuthnPlaceholder {
@@ -155,15 +135,8 @@ impl MiddlewareLayer for AuthnPlaceholder {
         MiddlewareKind::Pre
     }
 
-    fn is_enabled(&self) -> bool {
-        self.enable
-    }
-
     fn config(&self) -> serde_json::Result<serde_json::Value> {
-        serde_json::to_value(Config {
-            enable: self.enable,
-            ..Default::default()
-        })
+        Ok(serde_json::json!({}))
     }
 
     fn apply(&self, app: Router<Context>) -> Result<Router<Context>> {
@@ -173,20 +146,32 @@ impl MiddlewareLayer for AuthnPlaceholder {
 
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use axum::http::{HeaderMap, HeaderValue};
+
+    use super::wants_redirect;
 
     #[test]
-    fn root_is_exact_match_only() {
-        let config = Config::default();
-        assert!(config.is_public("/"));
-        assert!(!config.is_public("/dashboard"));
+    fn inertia_and_html_redirect() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-inertia", HeaderValue::from_static("true"));
+        assert!(wants_redirect(&headers));
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ACCEPT,
+            HeaderValue::from_static("text/html"),
+        );
+        assert!(wants_redirect(&headers));
     }
 
     #[test]
-    fn prefixes_are_matched() {
-        let config = Config::default();
-        assert!(config.is_public("/assets/dist/app.js"));
-        assert!(config.is_public("/login"));
-        assert!(!config.is_public("/logout"));
+    fn json_does_not_redirect() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ACCEPT,
+            HeaderValue::from_static("application/json"),
+        );
+        assert!(!wants_redirect(&headers));
+        assert!(!wants_redirect(&HeaderMap::new()));
     }
 }

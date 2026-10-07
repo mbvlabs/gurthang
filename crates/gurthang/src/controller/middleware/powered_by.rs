@@ -46,10 +46,9 @@ impl MiddlewareLayer for PoweredBy {
     }
 
     fn apply(&self, app: Router<Context>) -> Result<Router<Context>> {
-        let ident = self
-            .ident
-            .clone()
-            .unwrap_or_else(|| HeaderValue::from_static("gurthang"));
+        let Some(ident) = self.ident.clone() else {
+            return Ok(app);
+        };
         Ok(app.layer(SetResponseHeaderLayer::overriding(
             HeaderName::from_static("x-powered-by"),
             ident,

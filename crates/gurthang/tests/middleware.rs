@@ -7,15 +7,15 @@ use axum::{
     Router,
     body::Body,
     extract::Request,
-    http::StatusCode,
+    http::{StatusCode, header::ACCEPT},
     middleware::Next,
     response::{IntoResponse, Response},
     routing::get,
 };
 use gurthang::{
-    Config, Context, Environment, StartMode,
+    Config, Context, Environment, Route, RouteGroup, RouteGroupExt, StartMode,
     controller::middleware::{
-        MiddlewareKind, MiddlewareLayer, MiddlewareStack, apply_stack, timeout,
+        MiddlewareKind, MiddlewareLayer, MiddlewareStack, apply_stack, timeout, wrap_router,
     },
     inertia::InertiaRenderer,
     jobs::JobQueue,
@@ -132,14 +132,22 @@ fn recorder(
 }
 
 async fn send(router: Router<Context>, ctx: Context, uri: &str) -> Response {
+    send_with(router, ctx, uri, &[]).await
+}
+
+async fn send_with(
+    router: Router<Context>,
+    ctx: Context,
+    uri: &str,
+    headers: &[(&str, &str)],
+) -> Response {
+    let mut request = Request::builder().uri(uri);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
     router
         .with_state(ctx)
-        .oneshot(
-            Request::builder()
-                .uri(uri)
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(request.body(Body::empty()).unwrap())
         .await
         .unwrap()
 }
@@ -215,13 +223,10 @@ async fn pre_early_return_skips_handler_but_post_still_runs() {
 async fn post_sees_the_handler_status() {
     let log = Arc::new(Mutex::new(Vec::new()));
 
-    let router = Router::<Context>::new().route(
-        "/",
-        get(|| async { (StatusCode::IM_A_TEAPOT, "teapot") }),
-    );
+    let router =
+        Router::<Context>::new().route("/", get(|| async { (StatusCode::IM_A_TEAPOT, "teapot") }));
 
-    let stack =
-        MiddlewareStack::new().with(recorder("post", MiddlewareKind::Post, &log, None));
+    let stack = MiddlewareStack::new().with(recorder("post", MiddlewareKind::Post, &log, None));
 
     let router = apply_stack(router, stack).unwrap();
     let response = send(router, context(), "/").await;
@@ -299,32 +304,104 @@ fn session_layer() -> tower_sessions::SessionManagerLayer<tower_sessions::Memory
         .with_secure(false)
 }
 
-#[tokio::test]
-async fn authn_redirects_unauthenticated_requests() {
-    let stack = MiddlewareStack::new().with(Box::new(
-        gurthang::controller::middleware::authn::RequireAuth::<TestBackend>::new(
-            gurthang::controller::middleware::authn::Config {
-                enable: true,
-                public_paths: vec!["/".into(), "/login".into()],
-                redirect: Some("/login".into()),
-                status: 401,
-            },
-        ),
-    ));
+#[derive(Clone, Copy)]
+struct Pages;
 
-    let router = Router::<Context>::new()
-        .route("/dashboard", get(|| async { "dashboard" }))
-        .route("/login", get(|| async { "login" }));
+impl Pages {
+    async fn dashboard(self) -> &'static str {
+        "dashboard"
+    }
 
-    // The session wrap is outermost, exactly as it is in the default stack.
-    let auth_layer = axum_login::AuthManagerLayerBuilder::new(TestBackend, session_layer()).build();
-    let router = apply_stack(router, stack).unwrap().layer(auth_layer);
-
-    let protected = send(router.clone(), context(), "/dashboard").await;
-    assert_eq!(protected.status(), StatusCode::SEE_OTHER);
-    assert_eq!(protected.headers().get("location").unwrap(), "/login");
-
-    let public = send(router, context(), "/login").await;
-    assert_eq!(public.status(), StatusCode::OK);
+    async fn login(self) -> &'static str {
+        "login"
+    }
 }
 
+#[tokio::test]
+async fn authn_redirects_unauthenticated_requests() {
+    let pages = Pages;
+    let protected = RouteGroup::<Context>::new()
+        .add(
+            Route {
+                name: "dashboard",
+                path: "/dashboard",
+            }
+            .get(pages, Pages::dashboard),
+        )
+        .add_mw(gurthang::controller::middleware::authn::RequireAuth::<
+            TestBackend,
+        >::new("/login"))
+        .into_router();
+    let public = RouteGroup::<Context>::new()
+        .add(
+            Route {
+                name: "login",
+                path: "/login",
+            }
+            .get(pages, Pages::login),
+        )
+        .into_router();
+    let auth_layer = axum_login::AuthManagerLayerBuilder::new(TestBackend, session_layer()).build();
+    let router = public.merge(protected).layer(auth_layer);
+
+    let html = send_with(
+        router.clone(),
+        context(),
+        "/dashboard",
+        &[(ACCEPT.as_str(), "text/html")],
+    )
+    .await;
+    assert_eq!(html.status(), StatusCode::SEE_OTHER);
+    assert_eq!(html.headers().get("location").unwrap(), "/login");
+
+    let json = send_with(
+        router.clone(),
+        context(),
+        "/dashboard",
+        &[(ACCEPT.as_str(), "application/json")],
+    )
+    .await;
+    assert_eq!(json.status(), StatusCode::UNAUTHORIZED);
+
+    let login = send(router, context(), "/login").await;
+    assert_eq!(login.status(), StatusCode::OK);
+}
+
+struct RejectAll;
+
+impl MiddlewareLayer for RejectAll {
+    fn name(&self) -> &'static str {
+        "reject"
+    }
+
+    fn kind(&self) -> MiddlewareKind {
+        MiddlewareKind::Pre
+    }
+
+    fn config(&self) -> serde_json::Result<serde_json::Value> {
+        Ok(serde_json::Value::Null)
+    }
+
+    fn apply(&self, app: Router<Context>) -> gurthang::Result<Router<Context>> {
+        Ok(app.layer(axum::middleware::from_fn(
+            |_request: Request, _next: Next| async { StatusCode::UNAUTHORIZED.into_response() },
+        )))
+    }
+}
+
+#[tokio::test]
+async fn wrap_router_applies_only_to_the_sub_router() {
+    let protected = wrap_router(
+        Router::<Context>::new().route("/admin", get(|| async { "admin" })),
+        RejectAll,
+    )
+    .unwrap();
+    let public = Router::<Context>::new().route("/ok", get(|| async { "ok" }));
+    let router = public.merge(protected);
+
+    let denied = send(router.clone(), context(), "/admin").await;
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+
+    let allowed = send(router, context(), "/ok").await;
+    assert_eq!(allowed.status(), StatusCode::OK);
+}

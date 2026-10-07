@@ -35,17 +35,14 @@ pub mod static_assets;
 pub mod telemetry;
 pub mod timeout;
 
-use std::{
-    collections::HashSet,
-    io::Write,
-};
+use std::{collections::HashSet, io::Write};
 
 use axum::Router;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     app::Context,
-    config::{Config as AppConfig, Environment},
+    config::Environment,
     error::{Error, Result},
 };
 
@@ -245,125 +242,113 @@ impl MiddlewareStack {
 }
 
 pub fn default_middleware_stack(ctx: &Context) -> MiddlewareStack {
-    stack_from_config(ctx.config.as_ref())
+    default_stack(
+        ctx.config.environment.clone(),
+        ctx.config.session.secure,
+        ctx.config.server.ident.as_deref(),
+    )
 }
 
-pub fn stack_from_config(config: &AppConfig) -> MiddlewareStack {
-    let middlewares = &config.server.middlewares;
-    let mut static_assets = middlewares.static_assets.clone().unwrap_or_default();
-    static_assets.development = config.environment.is_development();
-    let mut csrf = middlewares.csrf.clone().unwrap_or_default();
-    csrf.secure = config.session.secure;
+/// Rust-only default stack. YAML does not influence membership or values.
+pub fn default_stack(
+    environment: Environment,
+    session_secure: bool,
+    ident: Option<&str>,
+) -> MiddlewareStack {
+    let mut static_assets = static_assets::StaticAssets::default();
+    static_assets.development = environment.is_development();
 
     let mut stack = MiddlewareStack::new();
 
     // wrap: outermost first
     stack
-        .push(Box::new(
-            middlewares
-                .catch_panic
-                .clone()
-                .unwrap_or(catch_panic::CatchPanic { enable: true }),
-        ))
-        .push(Box::new(session_auth::placeholder(
-            &middlewares.session_auth,
-        )))
-        .push(Box::new(csrf))
-        .push(Box::new(
-            middlewares
-                .request_id
-                .clone()
-                .unwrap_or(request_id::RequestId { enable: true }),
-        ))
-        .push(Box::new(telemetry::new(&middlewares.telemetry)))
-        .push(Box::new(
-            middlewares
-                .timeout_request
-                .clone()
-                .unwrap_or_else(|| timeout::TimeOut {
-                    enable: true,
-                    ..Default::default()
-                }),
-        ))
-        .push(Box::new(middlewares.cors.clone().unwrap_or_else(|| cors::Cors {
-            enable: false,
-            ..Default::default()
-        })))
-        .push(Box::new(
-            middlewares.limit_payload.clone().unwrap_or_default(),
-        ))
-        .push(Box::new(static_assets))
-        .push(Box::new(
-            middlewares
-                .fallback
-                .clone()
-                .unwrap_or_else(|| fallback::Fallback {
-                    enable: config.environment != Environment::Production,
-                    ..Default::default()
-                }),
-        ));
+        .push(Box::new(catch_panic::CatchPanic { enable: true }))
+        .push(Box::new(session_auth::placeholder()))
+        .push(Box::new(csrf::Csrf {
+            enable: true,
+            secure: session_secure,
+        }))
+        .push(Box::new(request_id::RequestId { enable: true }))
+        .push(Box::new(telemetry::new(&None)))
+        .push(Box::new(timeout::TimeOut::default()))
+        .push(Box::new(limit_payload::LimitPayload::default()))
+        .push(Box::new(static_assets));
 
-    // post
+    if environment != Environment::Production {
+        stack.push(Box::new(fallback::Fallback {
+            enable: true,
+            ..Default::default()
+        }));
+    }
+
+    // post — cors / compression / secure_headers stay off until an app pushes them
     stack
-        .push(Box::new(
-            middlewares
-                .compression
-                .clone()
-                .unwrap_or(compression::Compression { enable: false }),
-        ))
-        .push(Box::new(
-            middlewares
-                .etag
-                .clone()
-                .unwrap_or(etag::Etag { enable: true }),
-        ))
-        .push(Box::new(powered_by::new(config.server.ident.as_deref())))
-        .push(Box::new(middlewares.secure_headers.clone().unwrap_or_else(
-            || secure_headers::SecureHeader {
-                enable: false,
-                ..Default::default()
-            },
-        )))
-        .push(Box::new(metrics::new(&middlewares.metrics)))
-        .push(Box::new(logger::new(
-            &middlewares.logger.clone().unwrap_or_default(),
-        )));
+        .push(Box::new(etag::Etag { enable: true }))
+        .push(Box::new(powered_by::new(ident)))
+        .push(Box::new(metrics::new(&None)))
+        .push(Box::new(logger::new(&logger::Config::default())));
 
     // pre
+    stack.push(Box::new(remote_ip::RemoteIpMiddleware { enable: true }));
+    if environment != Environment::Test {
+        stack.push(Box::new(rate_limit::new(&None)));
+    }
     stack
-        .push(Box::new(
-            middlewares
-                .remote_ip
-                .clone()
-                .unwrap_or(remote_ip::RemoteIpMiddleware { enable: false }),
-        ))
-        .push(Box::new(rate_limit::new(&middlewares.rate_limit)))
-        .push(Box::new(authn::placeholder(&middlewares.authn)))
-        .push(Box::new(authz::new(&middlewares.authz)));
+        .push(Box::new(authn::placeholder()))
+        .push(Box::new(authz::placeholder()));
 
     stack
+}
+
+/// Apply one layer to a sub-router (same wrap → post → pre composition).
+///
+/// Prefer [`RouteGroupExt::add_mw`] when attaching middleware to bound routes.
+pub fn wrap_router(
+    router: Router<Context>,
+    layer: impl MiddlewareLayer + 'static,
+) -> Result<Router<Context>> {
+    apply_stack(router, MiddlewareStack::new().with(Box::new(layer)))
+}
+
+/// Group attach for [`RouteGroup`](crate::http::RouteGroup). Lives in `gurthang`
+/// because `gurthang-http` cannot depend on `Context` / [`MiddlewareLayer`].
+pub trait RouteGroupExt {
+    /// Wrap this group once with `layer`. Attach on the group, not each route.
+    fn add_mw(self, layer: impl MiddlewareLayer + 'static) -> Self;
+}
+
+impl RouteGroupExt for crate::http::RouteGroup<Context> {
+    fn add_mw(self, layer: impl MiddlewareLayer + 'static) -> Self {
+        crate::http::RouteGroup::from_router(
+            wrap_router(self.into_router(), layer).expect("route group middleware"),
+        )
+    }
 }
 
 pub fn apply_stack(router: Router<Context>, stack: MiddlewareStack) -> Result<Router<Context>> {
     stack.validate()?;
     let mut router = router;
     for layer in stack.composed().into_iter().rev() {
-        if layer.is_enabled() {
-            router = layer.apply(router)?;
-        }
+        router = layer.apply(router)?;
     }
     Ok(router)
 }
 
 pub fn print_stack(stack: &MiddlewareStack, out: &mut impl Write) -> Result<()> {
-    writeln!(out, "{:<6} {:<22} {}", "kind", "name", "status").map_err(Error::from)?;
+    writeln!(out, "{:<6} {:<22}", "kind", "name").map_err(Error::from)?;
     for layer in stack.composed() {
-        let status = if layer.is_enabled() {
-            "enabled"
-        } else {
-            "disabled"
-        };
-        writeln!(out, "{:<6} {:<22} {}", layer.kind(), layer.name(), status).map_err(Error::from)?;
+        writeln!(out, "{:<6} {:<22}", layer.kind(), layer.name()).map_err(Error::from)?;
+    }
+    Ok(())
+}
+
+pub fn print_stack_routes(stacks: &[(&str, &MiddlewareStack)], out: &mut impl Write) -> Result<()> {
+    writeln!(out, "{:<6} {:<22} {}", "kind", "name", "scope").map_err(Error::from)?;
+    for (scope, stack) in stacks {
+        for layer in stack.composed() {
+            writeln!(out, "{:<6} {:<22} {}", layer.kind(), layer.name(), scope)
+                .map_err(Error::from)?;
+        }
     }
     Ok(())
 }
@@ -394,8 +379,11 @@ pub struct MiddlewareConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{MiddlewareKind, MiddlewareLayer, MiddlewareStack, stack_from_config};
-    use crate::config::Config;
+    use super::{
+        MiddlewareKind, MiddlewareLayer, MiddlewareStack, default_stack, print_stack,
+        print_stack_routes,
+    };
+    use crate::config::Environment;
 
     struct Dummy(&'static str, MiddlewareKind);
 
@@ -427,25 +415,6 @@ mod tests {
     fn names(stack: &MiddlewareStack) -> Vec<&'static str> {
         stack.composed().iter().map(|layer| layer.name()).collect()
     }
-
-    const SAMPLE: &str = r#"
-server:
-  host: 127.0.0.1
-  port: 3000
-  url: http://127.0.0.1:3000
-session:
-  secure: false
-inertia:
-  ssr_runtime: node
-  ssr_timeout_ms: 5000
-workers:
-  concurrency: 1
-  poll_interval_ms: 1000
-  lease_seconds: 10
-  timeout_seconds: 5
-logger:
-  level: info
-"#;
 
     #[test]
     fn stack_ext_inserts_replaces_and_deletes() {
@@ -489,16 +458,13 @@ logger:
             .push(dummy("wrap_2", MiddlewareKind::Wrap));
         assert_eq!(
             names(&stack),
-            vec![
-                "wrap_1", "wrap_2", "post_2", "post_1", "pre_1", "pre_2"
-            ]
+            vec!["wrap_1", "wrap_2", "post_2", "post_1", "pre_1", "pre_2"]
         );
     }
 
     #[test]
     fn default_stack_orders_kinds_and_keeps_session_outermost() {
-        let config = Config::from_yaml(SAMPLE).unwrap();
-        let stack = stack_from_config(&config);
+        let stack = default_stack(Environment::Development, false, None);
         let names = names(&stack);
         let session = names
             .iter()
@@ -506,46 +472,80 @@ logger:
             .unwrap();
         let csrf = names.iter().position(|name| *name == "csrf").unwrap();
         let logger = names.iter().position(|name| *name == "logger").unwrap();
-        let request_id = names
-            .iter()
-            .position(|name| *name == "request_id")
-            .unwrap();
-        let rate_limit = names
-            .iter()
-            .position(|name| *name == "rate_limit")
-            .unwrap();
+        let request_id = names.iter().position(|name| *name == "request_id").unwrap();
+        let rate_limit = names.iter().position(|name| *name == "rate_limit").unwrap();
 
-        // session_auth wraps CSRF, which wraps the request id.
         assert!(session < csrf, "session must wrap csrf: {names:?}");
         assert!(csrf < request_id, "csrf must wrap request_id: {names:?}");
-        // request_id is a wrap, so it runs before the post logger.
-        assert!(request_id < logger, "request_id must wrap logger: {names:?}");
-        // pre middleware runs closest to the handler.
+        assert!(
+            request_id < logger,
+            "request_id must wrap logger: {names:?}"
+        );
         assert!(logger < rate_limit, "pre must run after post: {names:?}");
     }
 
     #[test]
-    fn default_stack_enables_telemetry_and_timeout() {
-        let config = Config::from_yaml(SAMPLE).unwrap();
-        let stack = stack_from_config(&config);
-        for name in ["telemetry", "timeout_request", "logger", "metrics"] {
-            let layer = stack.get(name).unwrap();
-            assert!(layer.is_enabled(), "{name} should be enabled by default");
+    fn default_stack_includes_batteries_and_omits_opt_in_layers() {
+        let stack = default_stack(Environment::Development, false, None);
+        for name in [
+            "telemetry",
+            "timeout_request",
+            "logger",
+            "metrics",
+            "remote_ip",
+            "rate_limit",
+            "fallback",
+        ] {
+            assert!(
+                stack.contains(name),
+                "{name} should be in the default stack"
+            );
+        }
+        for name in ["cors", "compression", "secure_headers"] {
+            assert!(
+                !stack.contains(name),
+                "{name} stays off until an app pushes it"
+            );
         }
     }
 
     #[test]
-    fn print_stack_lists_kind_name_and_status() {
-        let config = Config::from_yaml(SAMPLE).unwrap();
-        let stack = stack_from_config(&config);
+    fn test_env_omits_rate_limit() {
+        let stack = default_stack(Environment::Test, false, None);
+        assert!(!stack.contains("rate_limit"));
+    }
+
+    #[test]
+    fn production_omits_fallback() {
+        let stack = default_stack(Environment::Production, true, None);
+        assert!(!stack.contains("fallback"));
+    }
+
+    #[test]
+    fn print_stack_lists_kind_and_name() {
+        let stack = default_stack(Environment::Development, false, None);
         let mut out = Vec::new();
-        super::print_stack(&stack, &mut out).unwrap();
+        print_stack(&stack, &mut out).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert!(out.contains("kind"));
         assert!(out.contains("wrap"));
         assert!(out.contains("post"));
         assert!(out.contains("pre"));
         assert!(out.contains("session_auth"));
-        assert!(out.contains("enabled"));
+        assert!(!out.contains("enabled"));
+        assert!(!out.contains("disabled"));
+    }
+
+    #[test]
+    fn print_stack_routes_includes_scope() {
+        let global = default_stack(Environment::Development, false, None);
+        let group = MiddlewareStack::new().with(dummy("authn", MiddlewareKind::Pre));
+        let mut out = Vec::new();
+        print_stack_routes(&[("global", &global), ("dashboard", &group)], &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("scope"));
+        assert!(out.contains("global"));
+        assert!(out.contains("dashboard"));
+        assert!(out.contains("authn"));
     }
 }

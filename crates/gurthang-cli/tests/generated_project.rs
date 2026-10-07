@@ -196,8 +196,8 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(development.contains("port: 3000"));
     assert!(development.contains("ssr_runtime:"));
     assert!(development.contains("concurrency:"));
-    assert!(development.contains("csrf:"));
-    assert!(development.contains("session_auth:"));
+    assert!(!development.contains("middlewares:"));
+    assert!(development.contains("cookie:"));
     assert!(development.contains("mailer:"));
     assert!(development.contains("stub: true"));
 
@@ -271,7 +271,13 @@ fn generated_project_has_the_embedded_manifest_and_no_placeholders() {
     assert!(app.contains("async fn after_routes"));
     assert!(app.contains("fn middlewares"));
     assert!(app.contains("SessionAuthLayer"));
-    assert!(app.contains("RequireAuth"));
+    assert!(!app.contains("RequireAuth"));
+
+    let dashboard = fs::read_to_string(destination.join("src/controllers/dashboard.rs")).unwrap();
+    assert!(dashboard.contains("RequireAuth"));
+    assert!(dashboard.contains("RouteGroup"));
+    assert!(dashboard.contains("add_mw"));
+    assert!(!dashboard.contains("wrap_router"));
     assert!(app.contains("crate::assets::mount"));
     assert!(!app.contains("AssetsInitializer"));
     assert!(!app.contains("apply_http_layers"));

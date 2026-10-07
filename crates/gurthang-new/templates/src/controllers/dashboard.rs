@@ -2,7 +2,11 @@ use gurthang::prelude::*;
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::{error::Result, routes::auth, services::auth::AuthSession};
+use crate::{
+    error::Result,
+    routes::auth,
+    services::auth::{AuthBackend, AuthSession},
+};
 
 use super::shared::{SafeUser, SharedProps};
 
@@ -24,9 +28,10 @@ pub fn routes(ctx: &Context) -> Router<Context> {
     let dashboard = Dashboard {
         inertia: ctx.inertia.clone(),
     };
-    mount!(dashboard, {
-        crate::routes::dashboard::DASHBOARD => get(dashboard, Dashboard::show),
-    })
+    RouteGroup::new()
+        .add(crate::routes::dashboard::DASHBOARD.get(dashboard, Dashboard::show))
+        .add_mw(authn::RequireAuth::<AuthBackend>::new(auth::LOGIN.path))
+        .into_router()
 }
 
 impl Dashboard {

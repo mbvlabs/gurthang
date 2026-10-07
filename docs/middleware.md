@@ -32,58 +32,67 @@ Rules:
 - `MiddlewareStack::validate` runs at startup and rejects duplicate names or
   operations against unknown names, so mis-wiring fails fast instead of
   silently doing nothing.
+- Presence in the stack means the layer runs. YAML does not turn layers on or
+  off and does not supply middleware values.
 
 ## Default stack
 
-`default_middleware_stack` (built from `config.server.middlewares`) registers:
+`default_middleware_stack` is constructed in Rust from the environment
+(`session.secure` still comes from session config, for the CSRF cookie flag).
+`cors`, `compression`, and `secure_headers` are absent until an app `push`es
+them. `gurthang middleware` prints this default stack (kind + name). Runtime
+uses `Hooks::middlewares`, which may `replace` placeholders.
 
 | Kind   | Name              | Default | Notes |
 |--------|-------------------|---------|-------|
 | `wrap` | `catch_panic`     | on      | catches panics from the rest of the pipeline |
-| `wrap` | `session_auth`    | on      | session load/persist; the app swaps in `SessionAuthLayer<B>` |
+| `wrap` | `session_auth`    | placeholder | session load/persist; the app swaps in `SessionAuthLayer<B>` |
 | `wrap` | `csrf`            | on      | XSRF check + cookie issuance |
 | `wrap` | `request_id`      | on      | ensures and propagates `x-request-id` |
 | `wrap` | `telemetry`       | on      | tracing span over the rest of the pipeline |
 | `wrap` | `timeout_request` | on      | 30s default |
-| `wrap` | `cors`            | off     | |
 | `wrap` | `limit_payload`   | on      | 2 MB default body limit |
 | `wrap` | `static`          | on      | development asset mount |
-| `wrap` | `fallback`        | dev     | |
-| `post` | `compression`     | off     | |
+| `wrap` | `fallback`        | non-prod | omitted in production |
 | `post` | `etag`            | on      | |
 | `post` | `powered_by`      | on      | |
-| `post` | `secure_headers`  | off     | |
 | `post` | `metrics`         | on      | `MetricsRecorder` trait, `TracingMetrics` default |
 | `post` | `logger`          | on      | method, path, status, duration, request id |
-| `pre`  | `remote_ip`       | off     | reads `x-forwarded-for` |
-| `pre`  | `rate_limit`      | on      | 100 requests / 1s per IP |
-| `pre`  | `authn`           | off     | the app swaps in `RequireAuth<B>` |
-| `pre`  | `authz`           | off     | the app swaps in `RequireAuthorizer` |
+| `pre`  | `remote_ip`       | on      | reads `x-forwarded-for` |
+| `pre`  | `rate_limit`      | non-test | omitted in test; 100 requests / 1s per IP |
+| `pre`  | `authn`           | placeholder | the app swaps in `RequireAuth<B>` |
+| `pre`  | `authz`           | placeholder | the app swaps in `RequireAuthz` plus an `Authorizer` |
 
-Telemetry and timeout are on by default. Rate limiting is on with a generous
-ceiling; authorization is off until an app installs an authorizer. Run
-`gurthang middleware` to print the composed stack with kind, name, and status.
+Telemetry and timeout are on by default. Rate limiting is on outside test.
+Authorization is a no-op until an app installs an authorizer.
 
-## Configuring
+`gurthang middleware --routes` adds a `scope` column. Today that prints
+`global` for the Rust default stack. Group scopes show up when an app uses
+`RouteGroup::add_mw`; wiring the command to `Hooks::middlewares` is a later
+follow-up.
 
-`config.server.middlewares` is YAML. Each middleware reads its own section, for
-example:
+## Group attach
 
-```yaml
-server:
-  middlewares:
-    timeout_request:
-      enable: true
-      timeout: 30000
-    rate_limit:
-      enable: true
-      max_requests: 100
-      window_ms: 1000
-    authn:
-      enable: true
-      public_paths: ["/", "/login", "/register", "/assets"]
-      redirect: /login
+Catalog `Route` stays `{ name, path }`. Bind a verb and handler to get a
+`BoundRoute`, collect those in a `RouteGroup`, then `add_mw` once. That wraps
+the group's sub-router (T0); it is not a per-route layer. Welcome/auth keep
+`mount!` when they have no middleware.
+
+```rust
+pub fn routes(ctx: &Context) -> Router<Context> {
+    let dashboard = Dashboard { inertia: ctx.inertia.clone() };
+    RouteGroup::new()
+        .add(crate::routes::dashboard::DASHBOARD.get(dashboard, Dashboard::show))
+        .add_mw(authn::RequireAuth::<AuthBackend>::new(auth::LOGIN.path))
+        .into_router()
+}
 ```
+
+Two groups in one controller: two `RouteGroup`s, then `Router::merge`.
+`add_mw` comes from the prelude (`RouteGroupExt` in `gurthang`; it needs
+`Context`). `wrap_router` is the helper underneath. Global
+`Hooks::middlewares` still `replace`s `session_auth`; `authn` stays a
+placeholder on the global stack.
 
 ## Adding a custom middleware
 
@@ -144,17 +153,13 @@ stack.replace(
     "session_auth",
     Box::new(session_auth::SessionAuthLayer::new(AuthBackend::new(ctx.db.clone()), ctx)),
 );
-stack.replace(
-    "authn",
-    Box::new(authn::RequireAuth::<AuthBackend>::new(authn::Config {
-        enable: true,
-        public_paths: vec!["/".into(), "/login".into(), "/register".into(), "/assets".into()],
-        redirect: Some(crate::routes::auth::LOGIN.path.to_string()),
-        ..Default::default()
-    })),
-);
 ```
 
-`RequireAuth` rejects unauthenticated requests with a redirect (or a status when
-`redirect` is unset). Authorization is opt-in: implement `authz::Authorizer` and
-install `authz::RequireAuthz` to reject authenticated-but-forbidden requests.
+`RequireAuth` is “must be logged in”: wrap the routes that need a user.
+Inertia and HTML requests redirect to the login path you pass in; other
+clients get 401. There is no public-path skip list — unauthenticated
+routes simply are not wrapped.
+
+Authorization is opt-in: implement `authz::Authorizer` and `replace` the
+placeholder with `authz::RequireAuthz` to reject authenticated-but-forbidden
+requests.
